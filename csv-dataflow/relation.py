@@ -1,34 +1,19 @@
-from dataclasses import dataclass, field, fields, is_dataclass
+import csv
+from dataclasses import dataclass, fields, is_dataclass
+from pathlib import Path
 import types
-from typing import Any, Literal, Mapping, Optional, Union, get_args, get_origin
+from typing import Any, Iterator, Literal, Mapping, Union, get_args, get_origin
 
 SumOrProduct = Literal["+", "*"]
 
 DeBruijn = int
 
 
-@dataclass(frozen=True)
-class RelatedTo:
-    target: int
-    """
-    The number of the target node in the currently expanded target SOP
-    """
-    by: Optional[Union["Relation", DeBruijn]]
-    """
-    Either it's just related to the node at the index (under the parent relation),
-    or there's more detail under the given `Relation` or the parent one denoted by
-    the de Bruijn index
-    """
+SumProductLeaf = tuple[()]
 
 
 @dataclass(frozen=True)
-class SumProductLeaf:
-    related_backward: tuple[RelatedTo, ...] = field(kw_only=True, default=())
-    related_forward: tuple[RelatedTo, ...] = field(kw_only=True, default=())
-
-
-@dataclass(frozen=True)
-class SumProductTree(SumProductLeaf):
+class SumProductTree:
     """
     Because of Python being Python, children of a Sum will all
     be Products (or neither Sum nor Product), but children of
@@ -40,7 +25,6 @@ class SumProductTree(SumProductLeaf):
     """
 
     sop: SumOrProduct
-    n: int
     """Number of children, recursively"""
     children: Mapping[str, "SumProductNode"]
     """The key is the path member"""
@@ -105,6 +89,7 @@ Relation = Union[BasicRelation, ParallelRelation, SeriesRelation]
 #       Then go straight to "what does this partially specified
 #       domain / range member go to / come from"
 #       Then go to "is it a function"
+#       Then recursion and partitions
 
 
 def sop_from_type(t: type[Any]) -> SumProductNode:
@@ -120,40 +105,16 @@ def sop_from_type(t: type[Any]) -> SumProductNode:
         # Later more
         return SumProductLeaf()
 
-    children = {
-        key: sop_from_type(child_type) for key, child_type in child_types.items()
-    }
-
-    n = sum(
-        child.n if isinstance(child, SumProductTree) else 1
-        for child in children.values()
+    return SumProductTree(
+        sop, {key: sop_from_type(child_type) for key, child_type in child_types.items()}
     )
 
-    return SumProductTree(sop, n, children)
-
-
-def relation_from_types_and_linked_paths(
-    s: type[Any],
-    t: type[Any],
-    linked_paths: tuple[
-        tuple[tuple[SumProductPath, ...], tuple[SumProductPath, ...]], ...
-    ],
-) -> Relation:
-    # Do basic csv non recursive thing here
-    #  - Build initial SOPs from types
-    s_sop = sop_from_type(s)
-    t_sop = sop_from_type(t)
-
-    #  - For each path group build their leaf nodes (maybe
-    #    more than one node per path) then link them
-    #    - For each path in the path group:
-    #       - Navigate to the (has to be) leaf node belonging to
-    #         the penultimate path member
-    #       - Turn it into a Sum (so I guess we need to be in the parent)
-    #       - Add the possibility in the final path member as a child leaf
-    #         (string representation of value in key)
-    #    - Recalculate n for all nodes
-    # Then step back and just do dataflow thing on that
-    # Then make sure it's a function
-    # Then you can get crazy with recursion and partitions
+def paths_from_csv_column_name(sop: SumProductNode, name: str) -> Iterator[SumProductPath]:
     raise NotImplementedError
+
+def parallel_relation_from_csv(csv_path: Path) -> ParallelRelation:
+    with open(csv_path) as f:
+        csv_dict = csv.DictReader(f)
+
+    for row in csv_dict:
+        raise NotImplementedError
