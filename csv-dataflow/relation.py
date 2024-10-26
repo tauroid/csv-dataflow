@@ -2,18 +2,53 @@ import csv
 from dataclasses import dataclass, fields, is_dataclass
 from pathlib import Path
 import types
-from typing import Any, Iterator, Literal, Mapping, Union, get_args, get_origin
+from typing import (
+    Any,
+    Generic,
+    Iterator,
+    Literal,
+    Mapping,
+    MutableMapping,
+    TypeVar,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    overload,
+)
 
 SumOrProduct = Literal["+", "*"]
 
 DeBruijn = int
 
-
-SumProductLeaf = tuple[()]
+T = TypeVar("T")
 
 
 @dataclass(frozen=True)
-class SumProductTree:
+class SumProductPath(Generic[T]):
+    _path: tuple[str, ...]
+
+    def __iter__(self):
+        return iter(self._path)
+
+    def __len__(self):
+        return len(self._path)
+
+    @overload
+    def __getitem__(self, the_slice: int) -> str: ...
+
+    @overload
+    def __getitem__(self, the_slice: slice) -> "SumProductPath[T]": ...
+
+    def __getitem__(self, the_slice: int | slice) -> "str | SumProductPath[T]":
+        if isinstance(the_slice, int):
+            return self._path[the_slice]
+        else:
+            return SumProductPath(self._path[the_slice])
+
+
+@dataclass(frozen=True)
+class SumProductNode(Generic[T]):
     """
     Because of Python being Python, children of a Sum will all
     be Products (or neither Sum nor Product), but children of
@@ -26,22 +61,23 @@ class SumProductTree:
 
     sop: SumOrProduct
     """Number of children, recursively"""
-    children: Mapping[str, "SumProductNode"]
+    children: Mapping[str, "SumProductNode[T]"]
     """The key is the path member"""
 
+    def at(self, path: SumProductPath[T]) -> "SumProductNode[Any]":
+        raise NotImplementedError
 
-SumProductNode = Union[SumProductTree, SumProductLeaf]
 
-SumProductPath = tuple[str, ...]
+S = TypeVar("S")
 
 
 @dataclass(frozen=True)
-class BasicRelation:
-    source: SumProductNode
-    target: SumProductNode
+class BasicRelation(Generic[S, T]):
+    source: SumProductNode[S]
+    target: SumProductNode[T]
 
-    source_paths: tuple[SumProductPath, ...]
-    target_paths: tuple[SumProductPath, ...]
+    source_paths: tuple[SumProductPath[S], ...]
+    target_paths: tuple[SumProductPath[T], ...]
     """
     This is a binary relation, between all path groupings that "fill" the
     source or target path sets in the sense that for a particular grouping,
@@ -60,11 +96,11 @@ class BasicRelation:
 
 
 @dataclass(frozen=True)
-class ParallelRelation:
-    source: SumProductNode
-    target: SumProductNode
+class ParallelRelation(Generic[S, T]):
+    source: SumProductNode[S]
+    target: SumProductNode[T]
 
-    children: tuple["Relation", ...]
+    children: tuple["Relation[S,T]", ...]
     """
     These have to be defined between the same `source` and `target`
     as the parent.
@@ -78,12 +114,15 @@ class ParallelRelation:
 
 
 @dataclass(frozen=True)
-class SeriesRelation:
-    source: SumProductNode
-    stages: tuple[tuple["Relation", SumProductNode], ...]
+class SeriesRelation(Generic[S, T]):
+    source: SumProductNode[S]
+    target: SumProductNode[T]
+
+    stages: tuple[tuple["Relation[Any,Any]", SumProductNode[Any]], ...]
+    last_stage: "Relation[Any, T]"
 
 
-Relation = Union[BasicRelation, ParallelRelation, SeriesRelation]
+Relation = Union[BasicRelation[S, T], ParallelRelation[S, T], SeriesRelation[S, T]]
 
 # FIXME Remove relation stuff from SOP and use () for blank node
 #       Then go straight to "what does this partially specified
@@ -92,7 +131,7 @@ Relation = Union[BasicRelation, ParallelRelation, SeriesRelation]
 #       Then recursion and partitions
 
 
-def sop_from_type(t: type[Any]) -> SumProductNode:
+def sop_from_type(t: type[T]) -> SumProductNode[T]:
     sop: SumOrProduct
     child_types: dict[str, Any]
     if get_origin(t) is types.UnionType:
@@ -102,19 +141,82 @@ def sop_from_type(t: type[Any]) -> SumProductNode:
         sop = "*"
         child_types = {field.name: field.type for field in fields(t)}
     else:
-        # Later more
-        return SumProductLeaf()
+        # Assume remaining types are primitive i.e. sum
+        # Not actually true, will want to think about lists etc
+        sop = "+"
+        child_types = {}
 
-    return SumProductTree(
+    return SumProductNode(
         sop, {key: sop_from_type(child_type) for key, child_type in child_types.items()}
     )
 
-def paths_from_csv_column_name(sop: SumProductNode, name: str) -> Iterator[SumProductPath]:
-    raise NotImplementedError
 
-def parallel_relation_from_csv(csv_path: Path) -> ParallelRelation:
+def paths_from_csv_column_name(
+    sop: SumProductNode[T], name: str, prefix: SumProductPath[Any] = SumProductPath(())
+) -> Iterator[SumProductPath[T]]:
+    for key, child in sop.children.items():
+        new_prefix = SumProductPath[Any]((*prefix, key))
+        if key == name:  # FIXME allow the docstring heading too
+            yield new_prefix
+        else:
+            for path in paths_from_csv_column_name(child, name, new_prefix):
+                yield path
+
+
+def add_value_to_path(sop: SumProductNode[T], path: SumProductPath[T], value: str):
+    if len(path) == 0:
+        children = cast(MutableMapping[str, SumProductNode[Any]], sop.children)
+        assert value not in children
+        children[value] = SumProductNode("*", {})  # the empty product i.e. 1 :):):)
+    else:
+        add_value_to_path(sop.children[path[0]], path[1:], value)
+
+
+class Source: ...
+
+
+class Target: ...
+
+
+End = Source | Target
+
+
+def parallel_relation_from_csv(
+    source_type: type[S], target_type: type[T], csv_path: Path
+) -> ParallelRelation[S, T]:
+    sop_s = sop_from_type(source_type)
+    sop_t = sop_from_type(target_type)
+
     with open(csv_path) as f:
         csv_dict = csv.DictReader(f)
 
+    relations: list[BasicRelation[S, T]] = []
+
     for row in csv_dict:
-        raise NotImplementedError
+        source_paths: list[SumProductPath[S]] = []
+        target_paths: list[SumProductPath[T]] = []
+
+        end: End = Source()
+        for name, value in row.items():
+            # Blank is the separator for now
+            if name.strip() == "":
+                end = Target()
+                continue
+
+            match end:
+                case Source():
+                    paths = paths_from_csv_column_name(sop_s, name)
+                    for path in paths:
+                        add_value_to_path(sop_s, path, value)
+                        source_paths.append(SumProductPath((*path, value)))
+                case Target():
+                    paths = paths_from_csv_column_name(sop_t, name)
+                    for path in paths:
+                        add_value_to_path(sop_t, path, value)
+                        target_paths.append(SumProductPath((*path, value)))
+
+        relations.append(
+            BasicRelation(sop_s, sop_t, tuple(source_paths), tuple(target_paths))
+        )
+
+    return ParallelRelation(sop_s, sop_t, tuple(relations))
