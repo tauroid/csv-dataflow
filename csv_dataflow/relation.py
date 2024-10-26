@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import csv
 from dataclasses import dataclass, field
+from functools import cache
 from pathlib import Path
 from typing import (
     Any,
@@ -8,8 +9,8 @@ from typing import (
     Iterator,
     TypeVar,
 )
+import sys
 
-from .id_cache import id_cache
 from .sop import SumProductNode, SumProductPath, add_value_to_path, sop_from_type
 
 DeBruijn = int
@@ -26,8 +27,8 @@ type Relation[S, T] = (
 
 @dataclass(frozen=True)
 class BasicRelation(Generic[S, T]):
-    source: SumProductNode[S] = field(repr=False)
-    target: SumProductNode[T] = field(repr=False)
+    source: SumProductNode[S] = field(repr=False, hash=False)
+    target: SumProductNode[T] = field(repr=False, hash=False)
 
     source_paths: tuple[SumProductPath[S], ...]
     target_paths: tuple[SumProductPath[T], ...]
@@ -50,8 +51,8 @@ class BasicRelation(Generic[S, T]):
 
 @dataclass(frozen=True)
 class ParallelRelation(Generic[S, T]):
-    source: SumProductNode[S] = field(repr=False)
-    target: SumProductNode[T] = field(repr=False)
+    source: SumProductNode[S] = field(repr=False, hash=False)
+    target: SumProductNode[T] = field(repr=False, hash=False)
 
     children: tuple[Relation[S, T], ...]
     """
@@ -68,8 +69,8 @@ class ParallelRelation(Generic[S, T]):
 
 @dataclass(frozen=True)
 class SeriesRelation(Generic[S, T]):
-    source: SumProductNode[S] = field(repr=False)
-    target: SumProductNode[T] = field(repr=False)
+    source: SumProductNode[S] = field(repr=False, hash=False)
+    target: SumProductNode[T] = field(repr=False, hash=False)
 
     stages: tuple[tuple[Relation[Any, Any], SumProductNode[Any]], ...]
     last_stage: Relation[Any, T]
@@ -150,9 +151,11 @@ type FilteredRelation[S, T] = (
 
 class IFilteredRelation(ABC):
     @abstractmethod
-    # There's interior mutability in the sops but not the relations
-    # so we're good with id_cache
-    @id_cache
+    # I've excluded the mutable SOPs from hashing (otherwise cache
+    # would fail). Right now they don't affect is_empty, because
+    # emptiness is the (filtered) relation's purview only.
+    # But be careful.
+    @cache
     def is_empty(self) -> bool: ...
 
 
@@ -162,23 +165,32 @@ class FilteredBasicRelation(Generic[S, T], IFilteredRelation):
     source_filter_paths: tuple[SumProductPath[S], ...] | None
     target_filter_paths: tuple[SumProductPath[T], ...] | None
 
-    @id_cache
+    @cache
     def is_empty(self) -> bool:
         """
         Empty means there is no relation member containing at
         least one path in each active filter.
+
+        If the filter path is not a leaf node then it is
+        considered to represent all attached leaf nodes.
         """
         return (
             self.source_filter_paths is not None
             and all(
-                path not in self.basic_relation.source_paths
-                for path in self.source_filter_paths
+                not any(
+                    filter_path == relation_path[: len(filter_path)]
+                    for relation_path in self.basic_relation.source_paths
+                )
+                for filter_path in self.source_filter_paths
             )
         ) or (
             self.target_filter_paths is not None
             and all(
-                path not in self.basic_relation.target_paths
-                for path in self.target_filter_paths
+                not any(
+                    filter_path == relation_path[: len(filter_path)]
+                    for relation_path in self.basic_relation.target_paths
+                )
+                for filter_path in self.target_filter_paths
             )
         )
 
@@ -188,7 +200,7 @@ class FilteredParallelRelation(Generic[S, T], IFilteredRelation):
     parallel_relation: ParallelRelation[S, T] = field(repr=False)
     filtered_children: tuple[FilteredRelation[S, T], ...]
 
-    @id_cache
+    @cache
     def is_empty(self) -> bool:
         """
         Ideally remove empty children during construction
@@ -229,3 +241,23 @@ def filter_relation(
 
         case SeriesRelation():
             raise NotImplementedError
+
+def iter_source_paths(filtered_relation: FilteredRelation[S,T]) -> Iterator[SumProductPath[S]]:
+    match filtered_relation:
+        case FilteredBasicRelation(basic_relation=basic_relation):
+            for source_path in basic_relation.source_paths:
+                yield source_path
+        case FilteredParallelRelation(filtered_children=children):
+            for child in children:
+                for source_path in iter_source_paths(child):
+                    yield source_path
+
+def iter_target_paths(filtered_relation: FilteredRelation[S,T]) -> Iterator[SumProductPath[T]]:
+    match filtered_relation:
+        case FilteredBasicRelation(basic_relation=basic_relation):
+            for target_path in basic_relation.target_paths:
+                yield target_path
+        case FilteredParallelRelation(filtered_children=children):
+            for child in children:
+                for target_path in iter_target_paths(child):
+                    yield target_path
