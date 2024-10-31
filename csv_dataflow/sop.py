@@ -16,13 +16,14 @@ SumOrProduct = Literal["+", "*"]
 
 
 T = TypeVar("T")
+Data = TypeVar("Data", default=None)
 
 
 type SumProductPath[T] = tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class SumProductNode(Generic[T]):
+class SumProductNode(Generic[T, Data]):
     """
     Because of Python being Python, children of a Sum will all
     be Products (or neither Sum nor Product), but children of
@@ -34,11 +35,11 @@ class SumProductNode(Generic[T]):
     """
 
     sop: SumOrProduct
-    """Number of children, recursively"""
-    children: Mapping[str, "SumProductNode[T]"]
+    children: Mapping[str, "SumProductNode[Any, Data]"]
     """The key is the path member"""
+    data: Data = cast(Data, None)
 
-    def at(self, path: SumProductPath[T]) -> "SumProductNode[Any]":
+    def at(self, path: SumProductPath[T]) -> "SumProductNode[Any,Data]":
         if not path:
             return self
 
