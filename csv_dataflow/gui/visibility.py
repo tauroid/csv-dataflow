@@ -1,5 +1,5 @@
 from typing import TypeVar
-from ..sop import SumOrProduct, SumProductNode
+from ..sop import SumProductNode
 
 T = TypeVar("T")
 

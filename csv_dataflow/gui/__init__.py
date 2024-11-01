@@ -1,9 +1,13 @@
+from dataclasses import replace
 import inspect
 from itertools import chain, islice
 from pathlib import Path
-from typing import TypeVar
-from flask import Flask
+import pickle
+from typing import MutableMapping, TypeVar, cast
+from flask import Flask, session
+import sys
 
+from csv_dataflow.gui.visibility import compute_visible_sop
 from examples.ex1.types import A, B
 
 from ..relation import (
@@ -12,10 +16,14 @@ from ..relation import (
     Relation,
     SeriesRelation,
     parallel_relation_from_csv,
+    replace_source_and_target,
 )
-from ..sop import SumProductNode
+from ..sop import SumProductNode, map_node_data
+
+typed_session = cast(MutableMapping[str, bytes], session)
 
 app = Flask(__name__)
+app.config.update(SECRET_KEY="hello")
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -28,7 +36,7 @@ body {
     display: flex;
     margin: 0;
     width: 100vw;
-    height: 100vh;
+    min-height: 100vh;
     align-items: center;
     justify-content: center;
     gap: 50px;
@@ -222,6 +230,41 @@ def html(relation: Relation[S, T]) -> str:
 
 @app.route("/")
 def root() -> str:
-    return html(
-        parallel_relation_from_csv(A, B, Path("examples/ex1/a_name_to_b_code.csv")),
-    )
+    if not typed_session.get("visible"):
+        relation = parallel_relation_from_csv(
+            A, B, Path("examples/ex1/a_name_to_b_code.csv")
+        )
+
+        source_selected = map_node_data(lambda _: False, relation.source)
+        target_selected = map_node_data(lambda _: False, relation.target)
+        typed_session["selected"] = pickle.dumps(
+            replace_source_and_target(relation, source_selected, target_selected)
+        )
+
+        source_expanded = map_node_data(lambda _: False, relation.source)
+        target_expanded = map_node_data(lambda _: False, relation.target)
+        # Expand top level
+        source_expanded = replace(source_expanded, data=True)
+        target_expanded = replace(target_expanded, data=True)
+        typed_session["expanded"] = pickle.dumps(
+            replace_source_and_target(relation, source_expanded, target_expanded)
+        )
+
+        source_visible = compute_visible_sop(source_selected, source_expanded)
+        target_visible = compute_visible_sop(target_selected, target_expanded)
+        assert source_visible
+        assert target_visible
+        typed_session["visible"] = pickle.dumps(
+            replace_source_and_target(relation, source_visible, target_visible)
+        )
+
+    return html(pickle.loads(typed_session["visible"]))
+
+@app.route("/expanded/<path>", methods=["PUT"])
+def expand(path: str) -> str:
+    pass
+
+
+@app.route("/expanded/<path>", methods=["DELETE"])
+def collapse(path: str) -> str:
+    pass

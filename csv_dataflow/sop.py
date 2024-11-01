@@ -1,7 +1,8 @@
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 import types
 from typing import (
     Any,
+    Callable,
     Generic,
     Literal,
     Mapping,
@@ -76,3 +77,22 @@ def add_value_to_path(sop: SumProductNode[T], path: SumProductPath[T], value: st
         children[value] = UNIT
     else:
         add_value_to_path(sop.children[path[0]], path[1:], value)
+
+
+A = TypeVar("A")
+B = TypeVar("B")
+
+
+def map_node_data(
+    f: Callable[[A], B], node: SumProductNode[T, A]
+) -> SumProductNode[T, B]:
+    return cast(
+        SumProductNode[T, B],
+        replace(
+            node,
+            data=f(node.data),
+            children={
+                path: map_node_data(f, child) for path, child in node.children.items()
+            },
+        ),
+    )

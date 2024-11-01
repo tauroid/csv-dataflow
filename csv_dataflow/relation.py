@@ -1,17 +1,18 @@
 from abc import ABC, abstractmethod
 import csv
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
 from typing import (
     Any,
+    Callable,
     Generic,
     Iterator,
     TypeVar,
+    cast,
 )
-import sys
 
-from .sop import SumProductNode, SumProductPath, add_value_to_path, sop_from_type
+from .sop import SumProductNode, SumProductPath, add_value_to_path, sop_from_type, map_node_data as map_sop_node_data
 
 DeBruijn = int
 
@@ -19,16 +20,19 @@ T = TypeVar("T")
 
 S = TypeVar("S")
 
+Data = TypeVar("Data", default=None)
 
-type Relation[S, T] = (
-    BasicRelation[S, T] | ParallelRelation[S, T] | SeriesRelation[S, T]
+type Relation[S, T, Data=None] = (
+    BasicRelation[S, T, Data]
+    | ParallelRelation[S, T, Data]
+    | SeriesRelation[S, T, Data]
 )
 
 
 @dataclass(frozen=True)
-class BasicRelation(Generic[S, T]):
-    source: SumProductNode[S] = field(repr=False, hash=False)
-    target: SumProductNode[T] = field(repr=False, hash=False)
+class BasicRelation(Generic[S, T, Data]):
+    source: SumProductNode[S, Data] = field(repr=False, hash=False)
+    target: SumProductNode[T, Data] = field(repr=False, hash=False)
 
     source_paths: tuple[SumProductPath[S], ...]
     target_paths: tuple[SumProductPath[T], ...]
@@ -50,11 +54,11 @@ class BasicRelation(Generic[S, T]):
 
 
 @dataclass(frozen=True)
-class ParallelRelation(Generic[S, T]):
-    source: SumProductNode[S] = field(repr=False, hash=False)
-    target: SumProductNode[T] = field(repr=False, hash=False)
+class ParallelRelation(Generic[S, T, Data]):
+    source: SumProductNode[S, Data] = field(repr=False, hash=False)
+    target: SumProductNode[T, Data] = field(repr=False, hash=False)
 
-    children: tuple[Relation[S, T], ...]
+    children: tuple[Relation[S, T, Data], ...]
     """
     These have to be defined between the same `source` and `target`
     as the parent.
@@ -68,12 +72,12 @@ class ParallelRelation(Generic[S, T]):
 
 
 @dataclass(frozen=True)
-class SeriesRelation(Generic[S, T]):
-    source: SumProductNode[S] = field(repr=False, hash=False)
-    target: SumProductNode[T] = field(repr=False, hash=False)
+class SeriesRelation(Generic[S, T, Data]):
+    source: SumProductNode[S, Data] = field(repr=False, hash=False)
+    target: SumProductNode[T, Data] = field(repr=False, hash=False)
 
-    stages: tuple[tuple[Relation[Any, Any], SumProductNode[Any]], ...]
-    last_stage: Relation[Any, T]
+    stages: tuple[tuple[Relation[Any, Any, Data], SumProductNode[Any]], ...]
+    last_stage: Relation[Any, T, Data]
 
 
 # FIXME Then go straight to "what does this partially specified
@@ -242,7 +246,10 @@ def filter_relation(
         case SeriesRelation():
             raise NotImplementedError
 
-def iter_source_paths(filtered_relation: FilteredRelation[S,T]) -> Iterator[SumProductPath[S]]:
+
+def iter_source_paths(
+    filtered_relation: FilteredRelation[S, T]
+) -> Iterator[SumProductPath[S]]:
     match filtered_relation:
         case FilteredBasicRelation(basic_relation=basic_relation):
             for source_path in basic_relation.source_paths:
@@ -252,7 +259,10 @@ def iter_source_paths(filtered_relation: FilteredRelation[S,T]) -> Iterator[SumP
                 for source_path in iter_source_paths(child):
                     yield source_path
 
-def iter_target_paths(filtered_relation: FilteredRelation[S,T]) -> Iterator[SumProductPath[T]]:
+
+def iter_target_paths(
+    filtered_relation: FilteredRelation[S, T]
+) -> Iterator[SumProductPath[T]]:
     match filtered_relation:
         case FilteredBasicRelation(basic_relation=basic_relation):
             for target_path in basic_relation.target_paths:
@@ -261,3 +271,48 @@ def iter_target_paths(filtered_relation: FilteredRelation[S,T]) -> Iterator[SumP
             for child in children:
                 for target_path in iter_target_paths(child):
                     yield target_path
+
+A = TypeVar("A")
+B = TypeVar("B")
+
+def replace_source_and_target(
+    relation: Relation[S,T,Any],
+    new_source: SumProductNode[S, Any],
+    new_target: SumProductNode[T, Any]
+) -> Relation[S,T,Any]:
+    match relation:
+        case BasicRelation():
+            return replace(
+                relation,
+                source=new_source,
+                target=new_target,
+            )
+        case ParallelRelation(children=children):
+            return ParallelRelation(
+                new_source,
+                new_target,
+                tuple(
+                    replace_source_and_target(child, new_source, new_target)
+                    for child in children
+                )
+            )
+        case SeriesRelation():
+            raise NotImplementedError
+
+def map_node_data(f: Callable[[A],B], relation: Relation[S,T,A]) -> Relation[S,T,B]:
+    match relation:
+        case BasicRelation(source, target):
+            return cast(BasicRelation[S,T,B], replace(
+                relation,
+                source=map_sop_node_data(f,source),
+                target=map_sop_node_data(f,target),
+            ))
+        case ParallelRelation(source, target, children):
+            return cast(ParallelRelation[S,T,B],replace(
+                relation,
+                source=map_sop_node_data(f,source),
+                target=map_sop_node_data(f,target),
+                children=tuple(map_node_data(f, child) for child in children)
+            ))
+        case SeriesRelation():
+            raise NotImplementedError
