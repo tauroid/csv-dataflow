@@ -46,6 +46,33 @@ class SumProductNode(Generic[T, Data]):
 
         return self.children[path[0]].at(path[1:])
 
+    def replace_at(
+        self, path: SumProductPath[T], node: "SumProductNode[Any,Data]"
+    ) -> "SumProductNode[T, Data]":
+        assert path
+        if len(path) == 1:
+            return replace(self, children={**self.children, path[0]: node})
+        else:
+            return replace(
+                self,
+                children={
+                    **self.children,
+                    path[0]: self.children[path[0]].replace_at(path[1:], node),
+                },
+            )
+
+    def replace_data_at(
+        self, path: SumProductPath[T], data: Data
+    ) -> "SumProductNode[T, Data]":
+        return self.replace_at(path, replace(self.at(path), data=data))
+
+    def clip_path(self, path: SumProductPath[T], prefix: SumProductPath[T] = ()) -> SumProductPath[T]:
+        if not self.children:
+            return prefix
+        else:
+            assert path
+            return self.children[path[0]].clip_path(path[1:], (*prefix, path[0]))
+
 
 UNIT = SumProductNode[Any]("*", {})
 

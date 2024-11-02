@@ -3,27 +3,45 @@ import inspect
 from itertools import chain, islice
 from pathlib import Path
 import pickle
-from typing import MutableMapping, TypeVar, cast
-from flask import Flask, session
-import sys
+import time
+from typing import Any, MutableMapping, TypeVar, cast
+from flask import Flask, g, Response, session
 
-from csv_dataflow.gui.visibility import compute_visible_sop
+from csv_dataflow.gui.visibility import compute_visible_relation, compute_visible_sop
 from examples.ex1.types import A, B
 
 from ..relation import (
     BasicRelation,
     ParallelRelation,
     Relation,
+    RelationPath,
     SeriesRelation,
+    filter_relation,
+    iter_relation_paths,
     parallel_relation_from_csv,
     replace_source_and_target,
 )
-from ..sop import SumProductNode, map_node_data
+from ..sop import SumProductNode, SumProductPath, map_node_data
 
 typed_session = cast(MutableMapping[str, bytes], session)
 
 app = Flask(__name__)
 app.config.update(SECRET_KEY="hello")
+
+
+@app.before_request
+def start_timer():
+    g.start = time.time()
+
+
+# Maybe come back to this later but oob swapping not a priority
+# right now. Two requests Jackson
+@app.after_request
+def just_refresh(response: Response) -> Response:
+    response.headers["HX-Refresh"] = "true"
+    print(f"Response time: {time.time() - g.start:.2E}s")
+    return response
+
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -172,39 +190,68 @@ body > .sum {
     padding: 2px;
     height: 0px;
 }
+.highlighted {
+    background-color: #dfb !important;
+}
 """
 
 
-def sop_html(path: str, sop: SumProductNode[T]) -> str:
+def sop_html(visible: Relation[S, T, bool], path: RelationPath[S, T]) -> str:
+    sop = visible.at(path)
     match sop.sop:
         case "+":
             sop_class = "sum"
         case "*":
             sop_class = "product"
 
+    expand_path = f"/expanded/{path.to_str()}"
+    path_id = f"{path.to_str(":")}"
+    related_ids = tuple(
+        set(f"#{path.to_str(":")}" for path in iter_relation_paths(visible))
+    )
+    hover = (
+        f"on mouseenter toggle .highlighted on [{",".join(related_ids)}] until mouseleave"
+        if related_ids
+        else ""
+    )
+    label = path.flat()[-1]
+
     if sop.children:
+        if not path.sop_path:
+            # Don't collapse the root
+            hx_attrs = ""
+        else:
+            hx_attrs = f'hx-delete="{expand_path}" hx-swap="outerHTML" hx-target="closest .{sop_class}"'
+
+        child_htmls = (
+            sop_html(
+                filtered_relation or replace(visible, children=()),
+                child_path,
+            )
+            for child_label in sop.children
+            for child_path in (replace(path, sop_path=(*path.sop_path, child_label)),)
+            for filtered_relation in (filter_relation(visible, (child_path,)),)
+        )
+
         return inspect.cleandoc(
             f"""
             <div class="{sop_class}">
-                <div>{path}</div>
-                <div>
-                    {"".join(
-                        sop_html(child_path, child)
-                        for child_path, child in sop.children.items())}
-                </div>
+                <div id="{path_id}" _="{hover}" {hx_attrs}>{label}</div>
+                <div>{"".join(child_htmls)}</div>
             </div>
-        """
+            """
         )
     else:
-        return f"<div>{path}</div>"
+        return f"""<div id="{path_id}" _="{hover}" hx-put="{expand_path}" hx-swap="outerHTML">{label}</div>"""
 
 
-def relation_html(relation: Relation[S, T]) -> str:
-    match relation:
-        case BasicRelation(source=source, target=target) | ParallelRelation(
-            source=source, target=target
-        ):
-            sop_htmls = (sop_html("Source", source), sop_html("Target", target))
+def relation_html(visible: Relation[S, T, bool]) -> str:
+    match visible:
+        case BasicRelation() | ParallelRelation():
+            sop_htmls = (
+                sop_html(visible, RelationPath("Source", ())),
+                sop_html(visible, RelationPath("Target", ())),
+            )
             relation_htmls = ("boo",)
         case SeriesRelation():
             raise NotImplementedError
@@ -216,13 +263,17 @@ def relation_html(relation: Relation[S, T]) -> str:
     )
 
 
-def html(relation: Relation[S, T]) -> str:
+def html(visible: Relation[S, T, bool]) -> str:
     return inspect.cleandoc(
         f"""
         <!doctype html>
         <html>
-            <head><style>{css}</style></head>
-            <body>{relation_html(relation)}</body>
+            <head>
+                <style>{css}</style>
+                <script src="https://unpkg.com/htmx.org@2.0.3"></script>
+                <script src="https://unpkg.com/hyperscript.org@0.9.13"></script>
+            </head>
+            <body>{relation_html(visible)}</body>
         </html>
     """
     )
@@ -230,41 +281,49 @@ def html(relation: Relation[S, T]) -> str:
 
 @app.route("/")
 def root() -> str:
-    if not typed_session.get("visible"):
+    if not typed_session.get("selected"):
         relation = parallel_relation_from_csv(
             A, B, Path("examples/ex1/a_name_to_b_code.csv")
         )
 
         source_selected = map_node_data(lambda _: False, relation.source)
         target_selected = map_node_data(lambda _: False, relation.target)
-        typed_session["selected"] = pickle.dumps(
-            replace_source_and_target(relation, source_selected, target_selected)
-        )
+        selected = replace_source_and_target(relation, source_selected, target_selected)
+        typed_session["selected"] = pickle.dumps(selected)
 
         source_expanded = map_node_data(lambda _: False, relation.source)
         target_expanded = map_node_data(lambda _: False, relation.target)
         # Expand top level
         source_expanded = replace(source_expanded, data=True)
         target_expanded = replace(target_expanded, data=True)
-        typed_session["expanded"] = pickle.dumps(
-            replace_source_and_target(relation, source_expanded, target_expanded)
-        )
+        expanded = replace_source_and_target(relation, source_expanded, target_expanded)
+        typed_session["expanded"] = pickle.dumps(expanded)
+    else:
+        selected = pickle.loads(typed_session["selected"])
+        expanded = pickle.loads(typed_session["expanded"])
 
-        source_visible = compute_visible_sop(source_selected, source_expanded)
-        target_visible = compute_visible_sop(target_selected, target_expanded)
-        assert source_visible
-        assert target_visible
-        typed_session["visible"] = pickle.dumps(
-            replace_source_and_target(relation, source_visible, target_visible)
-        )
-
-    return html(pickle.loads(typed_session["visible"]))
-
-@app.route("/expanded/<path>", methods=["PUT"])
-def expand(path: str) -> str:
-    pass
+    return html(compute_visible_relation(selected, expanded))
 
 
-@app.route("/expanded/<path>", methods=["DELETE"])
-def collapse(path: str) -> str:
-    pass
+def set_path_expanded(path: RelationPath[A, B], yes: bool) -> Relation[A, B, bool]:
+    selected: ParallelRelation[A, B, bool] = pickle.loads(typed_session["selected"])
+    expanded: ParallelRelation[A, B, bool] = pickle.loads(
+        typed_session["expanded"]
+    ).replace_data_at(path, yes)
+    typed_session["expanded"] = pickle.dumps(expanded)
+
+    return compute_visible_relation(selected, expanded)
+
+
+@app.route("/expanded/<path:str_path>", methods=["PUT"])
+def expand(str_path: str) -> str:
+    path = RelationPath[A, B].from_str(str_path)
+
+    return sop_html(set_path_expanded(path, True), path)
+
+
+@app.route("/expanded/<path:str_path>", methods=["DELETE"])
+def collapse(str_path: str) -> str:
+    path = RelationPath[A, B].from_str(str_path)
+
+    return sop_html(set_path_expanded(path, False), path)
