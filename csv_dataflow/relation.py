@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 import csv
 from dataclasses import dataclass, field, replace
 from functools import cache
@@ -15,6 +15,7 @@ from typing import (
     cast,
 )
 
+from .newtype import NewType
 from .sop import (
     SumProductNode,
     SumProductPath,
@@ -36,17 +37,6 @@ type Relation[S, T, Data=None] = (
     | ParallelRelation[S, T, Data]
     | SeriesRelation[S, T, Data]
 )
-
-
-@dataclass(frozen=True)
-class NewType(Generic[T]):
-    _value: T
-
-    def __str__(self) -> str:
-        return str(self._value)
-
-    def __eq__(self, other: Any) -> bool:
-        return other == self._value
 
 
 class StageIndex(NewType[int]): ...
