@@ -44,6 +44,7 @@ class StageIndex(NewType[int]): ...
 
 class ParallelChildIndex(NewType[int]): ...
 
+
 RelationPathElement = StageIndex | ParallelChildIndex
 
 
@@ -146,15 +147,33 @@ class SeriesRelation(Generic[S, T, Data], RelationBase[S, T, Data]):
 
 
 def paths_from_csv_column_name(
-    sop: SumProductNode[T], name: str, prefix: SumProductPath[Any] = ()
+    sop: SumProductNode[T],
+    name_path: tuple[str, ...],
+    prefix: SumProductPath[Any] = (),
+    immediate: bool = False,
 ) -> Iterator[SumProductPath[T]]:
+    name = name_path[0]
+    something_matched = False
     for key, child in sop.children.items():
         new_prefix = (*prefix, key)
         if key == name:  # FIXME allow the docstring heading too
-            yield new_prefix
+            something_matched = True
+            if len(name_path) == 1:
+                yield new_prefix
+            else:
+                for path in paths_from_csv_column_name(
+                    child, name_path[1:], new_prefix, True
+                ):
+                    yield path
         else:
-            for path in paths_from_csv_column_name(child, name, new_prefix):
-                yield path
+            if not immediate:
+                for path in paths_from_csv_column_name(child, name_path, new_prefix):
+                    yield path
+
+    if immediate and not something_matched:
+        raise ValueError(
+            f"{name_path} didn't match any immediate child {sop.children.keys()}"
+        )
 
 
 class Source: ...
@@ -188,14 +207,22 @@ def parallel_relation_from_csv(
                     end = Target()
                     continue
 
+                # Blank value (for now) means no connection
+                if value == "":
+                    continue
+
                 match end:
                     case Source():
-                        paths = paths_from_csv_column_name(sop_s, name)
+                        paths = paths_from_csv_column_name(
+                            sop_s, tuple(map(str.strip, name.split("/")))
+                        )
                         for path in paths:
                             add_value_to_path(sop_s, path, value)
                             source_paths.append((*path, value))
                     case Target():
-                        paths = paths_from_csv_column_name(sop_t, name)
+                        paths = paths_from_csv_column_name(
+                            sop_t, tuple(map(str.strip, name.split("/")))
+                        )
                         for path in paths:
                             add_value_to_path(sop_t, path, value)
                             target_paths.append((*path, value))
@@ -221,7 +248,10 @@ def iter_relation_paths(relation: Relation[S, T, Data]) -> Iterator[RelationPath
         case SeriesRelation():
             raise NotImplementedError
 
-def iter_basic_relations(relation: Relation[S, T, Data]) -> Iterator[BasicRelation[S, T, Data]]:
+
+def iter_basic_relations(
+    relation: Relation[S, T, Data]
+) -> Iterator[BasicRelation[S, T, Data]]:
     match relation:
         case BasicRelation():
             yield relation

@@ -1,5 +1,5 @@
-Name,option,,Option 1 / m,Option 2 / m,n,o,p
+name,option,,Option1 / m,Option2 / m,n,o,p
 a,,,True,False,True,,a
-b,,,False,True,False,b,,
+b,,,False,True,False,b,
 ,True,,,,,,apple
 ,False,,,,,banana,

@@ -347,9 +347,17 @@ def html(visible: Relation[S, T, bool]) -> str:
 @app.route("/")
 def root() -> str:
     if not typed_session.get("selected"):
+        # relation_1 = parallel_relation_from_csv(
+        #     A, B, Path("examples/ex1/a_name_to_b_code.csv")
+        # )
         relation = parallel_relation_from_csv(
-            A, B, Path("examples/ex1/a_name_to_b_code.csv")
+            A,B,Path("examples/ex1/a_name_to_b_option.csv")
         )
+        # relation = ParallelRelation(
+        #     relation_1.source,
+        #     relation_1.target,
+        #     (relation_1, relation_2)
+        # )
 
         source_selected = map_node_data(lambda _: False, relation.source)
         target_selected = map_node_data(lambda _: False, relation.target)
