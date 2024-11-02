@@ -39,10 +39,29 @@ type Relation[S, T, Data=None] = (
 
 
 @dataclass(frozen=True)
+class NewType(Generic[T]):
+    _value: T
+
+    def __str__(self) -> str:
+        return str(self._value)
+
+    def __eq__(self, other: Any) -> bool:
+        return other == self._value
+
+
+class StageIndex(NewType[int]): ...
+
+
+class ParallelChildIndex(NewType[int]): ...
+
+RelationPathElement = StageIndex | ParallelChildIndex
+
+
+@dataclass(frozen=True)
 class RelationPath(Generic[S, T]):
     point: Literal["Source", "Target"]
     sop_path: SumProductPath[Any]
-    stage: tuple[str, ...] = ()
+    relation_prefix: tuple[RelationPathElement, ...] = ()
 
     @classmethod
     def from_str(cls, s: str) -> Self:
@@ -53,12 +72,12 @@ class RelationPath(Generic[S, T]):
         return cls(point, path)  # Deal with stage later
 
     @cache
-    def flat(self) -> tuple[str, ...]:
-        return (*self.stage, self.point, *self.sop_path)
+    def flat(self) -> tuple[RelationPathElement | str, ...]:
+        return (*self.relation_prefix, self.point, *self.sop_path)
 
     @cache
     def to_str(self, separator: str = "/") -> str:
-        return separator.join(self.flat())
+        return separator.join(map(str, self.flat()))
 
 
 @dataclass(frozen=True)
@@ -67,7 +86,7 @@ class RelationBase(ABC, Generic[S, T, Data]):
     target: SumProductNode[T, Data] = field(repr=False, hash=False)
 
     def at(self, path: RelationPath[S, T]) -> SumProductNode[Any, Data]:
-        assert path.stage == ()
+        assert path.relation_prefix == ()
         match path.point:
             case "Source":
                 return self.source.at(path.sop_path)
@@ -77,7 +96,7 @@ class RelationBase(ABC, Generic[S, T, Data]):
     def replace_at(
         self, path: RelationPath[S, T], node: SumProductNode[Any, Data]
     ) -> Self:
-        assert path.stage == ()
+        assert path.relation_prefix == ()
         match path.point:
             case "Source":
                 return replace(self, source=self.source.replace_at(path.sop_path, node))
@@ -212,6 +231,17 @@ def iter_relation_paths(relation: Relation[S, T, Data]) -> Iterator[RelationPath
         case SeriesRelation():
             raise NotImplementedError
 
+def iter_basic_relations(relation: Relation[S, T, Data]) -> Iterator[BasicRelation[S, T, Data]]:
+    match relation:
+        case BasicRelation():
+            yield relation
+        case ParallelRelation(children=children):
+            for child in children:
+                for descendant in iter_basic_relations(child):
+                    yield descendant
+        case SeriesRelation():
+            raise NotImplementedError
+
 
 def filter_relation(
     relation: Relation[S, T, Data], filter_paths: Collection[RelationPath[S, T]]
@@ -225,7 +255,7 @@ def filter_relation(
             for filter_path in filter_paths:
                 n = len(filter_path.sop_path)
 
-                assert filter_path.stage == ()
+                assert filter_path.relation_prefix == ()
 
                 match filter_path.point:
                     case "Source":
@@ -267,19 +297,14 @@ def replace_source_and_target(
 ) -> Relation[S, T, Data]:
     match relation:
         case BasicRelation(source_paths=source_paths, target_paths=target_paths):
-            clipped_source_paths = tuple(set(
-                new_source.clip_path(source_path)
-                for source_path in source_paths
-            ))
-            clipped_target_paths = tuple(set(
-                new_target.clip_path(target_path)
-                for target_path in target_paths
-            ))
+            clipped_source_paths = tuple(
+                set(new_source.clip_path(source_path) for source_path in source_paths)
+            )
+            clipped_target_paths = tuple(
+                set(new_target.clip_path(target_path) for target_path in target_paths)
+            )
             return BasicRelation(
-                new_source,
-                new_target,
-                clipped_source_paths,
-                clipped_target_paths
+                new_source, new_target, clipped_source_paths, clipped_target_paths
             )
         case ParallelRelation(children=children):
             return ParallelRelation(

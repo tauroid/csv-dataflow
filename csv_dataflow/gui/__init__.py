@@ -1,13 +1,13 @@
 from dataclasses import replace
 import inspect
-from itertools import chain, islice
+from itertools import accumulate, chain, islice
 from pathlib import Path
 import pickle
 import time
-from typing import Any, MutableMapping, TypeVar, cast
+from typing import MutableMapping, TypeVar, cast
 from flask import Flask, g, Response, session
 
-from csv_dataflow.gui.visibility import compute_visible_relation, compute_visible_sop
+from csv_dataflow.gui.visibility import compute_visible_relation
 from examples.ex1.types import A, B
 
 from ..relation import (
@@ -17,11 +17,12 @@ from ..relation import (
     RelationPath,
     SeriesRelation,
     filter_relation,
+    iter_basic_relations,
     iter_relation_paths,
     parallel_relation_from_csv,
     replace_source_and_target,
 )
-from ..sop import SumProductNode, SumProductPath, map_node_data
+from ..sop import map_node_data
 
 typed_session = cast(MutableMapping[str, bytes], session)
 
@@ -59,7 +60,7 @@ body {
     justify-content: center;
     gap: 50px;
 }
-div:not(:has(*)) {
+.sum div:not(:has(*)), .product div:not(:has(*)) {
     border: 2px solid black;
     padding: 4px;
     width: 100%;
@@ -127,10 +128,18 @@ div:not(:has(*)) {
 .product > div:first-child, .sum > div:first-child {
     background-color: #bbb;
 }
+.product > div.highlighted:first-child, .sum > div.highlighted:first-child {
+    background-color: #a0b099 !important;
+}
 .product > div:last-child > .product > div:first-child,
 .product > div:last-child > .sum > div:first-child
 {
     background-color: #eee;
+}
+.product > div:last-child > .product > div.highlighted:first-child,
+.product > div:last-child > .sum > div.highlighted:first-child
+{
+    background-color: #dec !important;
 }
 .product > div:last-child > .product > div:first-child:before,
 .product > div:last-child > .sum > div:first-child:before
@@ -193,7 +202,53 @@ body > .sum {
 .highlighted {
     background-color: #dfb !important;
 }
+.arrows {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 30pt;
+    gap: 20px;
+}
+.arrows > div {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 6px;
+    height: 35px;
+    width: 75px;
+    border-radius: 5px;
+    overflow: hidden;
+}
+.arrows .highlighted {
+    background-color: #dfb !important;
+    border: 2px solid black;
+}
 """
+
+
+def basic_relation_id(relation: BasicRelation[S, T, bool]) -> str:
+    return f"rel-{hash(relation)}"
+
+
+def highlight_related_on_hover(visible: Relation[S, T, bool]) -> str:
+    relation_paths = filter(
+        lambda p: len(p) > 1,
+        chain.from_iterable(
+            accumulate(map(lambda x: (x,), path.flat()))
+            for path in iter_relation_paths(visible)
+        ),
+    )
+    related_ids = (f"#{":".join(map(str, path))}" for path in set(relation_paths))
+    basic_relation_ids = set(map(
+        lambda r: f"#{basic_relation_id(r)}", iter_basic_relations(visible)
+    ))
+    return (
+        f"on mouseenter toggle .highlighted on [{",".join(chain(related_ids, basic_relation_ids))}] until mouseleave"
+        if related_ids
+        else ""
+    )
 
 
 def sop_html(visible: Relation[S, T, bool], path: RelationPath[S, T]) -> str:
@@ -206,14 +261,9 @@ def sop_html(visible: Relation[S, T, bool], path: RelationPath[S, T]) -> str:
 
     expand_path = f"/expanded/{path.to_str()}"
     path_id = f"{path.to_str(":")}"
-    related_ids = tuple(
-        set(f"#{path.to_str(":")}" for path in iter_relation_paths(visible))
-    )
-    hover = (
-        f"on mouseenter toggle .highlighted on [{",".join(related_ids)}] until mouseleave"
-        if related_ids
-        else ""
-    )
+
+    hover = highlight_related_on_hover(visible) if path.sop_path else ""
+
     label = path.flat()[-1]
 
     if sop.children:
@@ -244,6 +294,23 @@ def sop_html(visible: Relation[S, T, bool], path: RelationPath[S, T]) -> str:
     else:
         return f"""<div id="{path_id}" _="{hover}" hx-put="{expand_path}" hx-swap="outerHTML">{label}</div>"""
 
+def arrow_div(basic_relation: BasicRelation[S,T,bool]) -> str:
+    return f"""
+       <div id="{basic_relation_id(basic_relation)}"
+             _="{highlight_related_on_hover(basic_relation)}">
+         ⟶
+       </div>
+    """
+
+def arrows_html(visible: Relation[S, T, bool]) -> str:
+    return f"""
+        <div class="arrows">
+            {"".join(arrow_div(basic_relation) for basic_relation in dict(
+                (r,None) for r in iter_basic_relations(visible)
+             ))}
+        </div>
+    """
+
 
 def relation_html(visible: Relation[S, T, bool]) -> str:
     match visible:
@@ -252,14 +319,12 @@ def relation_html(visible: Relation[S, T, bool]) -> str:
                 sop_html(visible, RelationPath("Source", ())),
                 sop_html(visible, RelationPath("Target", ())),
             )
-            relation_htmls = ("boo",)
+            arrows = arrows_html(visible)
         case SeriesRelation():
             raise NotImplementedError
 
     return "".join(
-        islice(
-            chain.from_iterable(zip(chain(("",), relation_htmls), sop_htmls)), 1, None
-        )
+        islice(chain.from_iterable(zip(chain(("",), (arrows,)), sop_htmls)), 1, None)
     )
 
 
