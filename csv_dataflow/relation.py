@@ -1,6 +1,6 @@
 from abc import ABC
 import csv
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
 from typing import (
@@ -71,11 +71,7 @@ class RelationPath(Generic[S, T]):
         return separator.join(map(str, self.flat()))
 
 
-@dataclass(frozen=True)
-class RelationBase(ABC, Generic[S, T, Data]):
-    source: SumProductNode[S, Data] = field(repr=False, hash=False)
-    target: SumProductNode[T, Data] = field(repr=False, hash=False)
-
+class IRelation(ABC, Generic[S, T]):
     def at(self, path: RelationPath[S, T]) -> SumProductNode[Any, Data]:
         assert path.relation_prefix == ()
         match path.point:
@@ -99,9 +95,7 @@ class RelationBase(ABC, Generic[S, T, Data]):
 
 
 @dataclass(frozen=True)
-class BasicRelation(Generic[S, T, Data], RelationBase[S, T, Data]):
-    source_paths: tuple[SumProductPath[S], ...]
-    target_paths: tuple[SumProductPath[T], ...]
+class BasicRelation(Generic[S, T], IRelation[S, T]):
     """
     This is a binary relation, between all path groupings that "fill" the
     source or target path sets in the sense that for a particular grouping,
@@ -118,14 +112,20 @@ class BasicRelation(Generic[S, T, Data], RelationBase[S, T, Data]):
     them meaning (even if that meaning doesn't turn out to be a function).
     """
 
+    source: SumProductNode[S]
+    target: SumProductNode[T]
+
 
 @dataclass(frozen=True)
-class ParallelRelation(Generic[S, T, Data], RelationBase[S, T, Data]):
-    children: tuple[Relation[S, T, Data], ...]
-    """
-    These have to be defined between the same `source` and `target`
-    as the parent.
+class Between(Generic[S, T]):
+    source: SumProductPath[S]
+    target: SumProductPath[T]
 
+
+@dataclass(frozen=True)
+class ParallelRelation(Generic[S, T], IRelation[S, T]):
+    children: tuple[tuple[Relation[S, T], Between[S, T]], ...]
+    """
     They are independently satisfiable, i.e. this is the union of the
     child relations plus any (g ∪ m, h ∪ n) for any (g,h), (m,n) coming
     from child relations (the g ∪ m, h ∪ n need not fill any union of
@@ -135,9 +135,9 @@ class ParallelRelation(Generic[S, T, Data], RelationBase[S, T, Data]):
 
 
 @dataclass(frozen=True)
-class SeriesRelation(Generic[S, T, Data], RelationBase[S, T, Data]):
-    stages: tuple[tuple[Relation[Any, Any, Data], SumProductNode[Any]], ...]
-    last_stage: Relation[Any, T, Data]
+class SeriesRelation(Generic[S, T], IRelation[S, T]):
+    stages: tuple[tuple[Relation[Any, Any], SumProductNode[Any]], ...]
+    last_stage: Relation[Any, T]
 
 
 # FIXME Then go straight to "what does this partially specified
