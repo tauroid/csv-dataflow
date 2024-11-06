@@ -1,17 +1,22 @@
 from dataclasses import dataclass, fields, is_dataclass, replace
+from pprint import pprint
 import types
 from typing import (
     Any,
     Callable,
+    Collection,
     Generic,
+    Iterable,
+    Iterator,
     Literal,
     Mapping,
-    MutableMapping,
     TypeVar,
     cast,
     get_args,
     get_origin,
 )
+
+from frozendict import frozendict
 
 SumOrProduct = Literal["+", "*"]
 
@@ -55,10 +60,12 @@ class SumProductNode(Generic[T, Data]):
         else:
             return replace(
                 self,
-                children={
-                    **self.children,
-                    path[0]: self.children[path[0]].replace_at(path[1:], node),
-                },
+                children=frozendict(
+                    {
+                        **self.children,
+                        path[0]: self.children[path[0]].replace_at(path[1:], node),
+                    }
+                ),
             )
 
     def replace_data_at(
@@ -66,7 +73,9 @@ class SumProductNode(Generic[T, Data]):
     ) -> "SumProductNode[T, Data]":
         return self.replace_at(path, replace(self.at(path), data=data))
 
-    def clip_path(self, path: SumProductPath[T], prefix: SumProductPath[T] = ()) -> SumProductPath[T]:
+    def clip_path(
+        self, path: SumProductPath[T], prefix: SumProductPath[T] = ()
+    ) -> SumProductPath[T]:
         if not self.children:
             return prefix
         else:
@@ -74,7 +83,7 @@ class SumProductNode(Generic[T, Data]):
             return self.children[path[0]].clip_path(path[1:], (*prefix, path[0]))
 
 
-UNIT = SumProductNode[Any]("*", {})
+UNIT = SumProductNode[Any]("*", frozendict[str, SumProductNode[Any]]({}))
 
 
 def sop_from_type(t: type[T]) -> SumProductNode[T]:
@@ -93,17 +102,79 @@ def sop_from_type(t: type[T]) -> SumProductNode[T]:
         child_types = {}
 
     return SumProductNode(
-        sop, {key: sop_from_type(child_type) for key, child_type in child_types.items()}
+        sop,
+        frozendict[str, SumProductNode[Any]](
+            {key: sop_from_type(child_type) for key, child_type in child_types.items()}
+        ),
     )
 
 
-def add_value_to_path(sop: SumProductNode[T], path: SumProductPath[T], value: str):
-    if len(path) == 0:
-        children = cast(MutableMapping[str, SumProductNode[Any]], sop.children)
-        assert value not in children
-        children[value] = UNIT
+def iter_sop_paths(
+    node: SumProductNode[T, Data], prefix: SumProductPath[T] = ()
+) -> Iterator[SumProductPath[T]]:
+    if not node.children:
+        yield prefix
     else:
-        add_value_to_path(sop.children[path[0]], path[1:], value)
+        for child_path, child in node.children.items():
+            for path in iter_sop_paths(child, (*prefix, child_path)):
+                yield path
+
+
+def add_paths(
+    node: SumProductNode[T], paths: Iterable[SumProductPath[T]]
+) -> SumProductNode[T]:
+    paths_tuple = tuple(paths)
+
+    def paths_at(element: str) -> Iterator[SumProductPath[T]]:
+        for path in paths_tuple:
+            if path[0] == element and len(path) > 1:
+                yield path[1:]
+
+    if node.children:
+        children = frozendict[str, SumProductNode[T]](
+            {
+                child_path: add_paths(node.children[child_path], paths_at(child_path))
+                for child_path in node.children
+            }
+        )
+    else:
+        children = frozendict[str, SumProductNode[T]](
+            {
+                child_path: add_paths(
+                    SumProductNode("+", {}),
+                    paths_at(child_path),
+                )
+                for child_path in {path[0]: None for path in paths_tuple}.keys()
+            }
+        )
+
+    return SumProductNode(
+        node.sop,
+        children,
+        node.data,
+    )
+
+
+def select_from_paths(
+    node: SumProductNode[T, Data], paths: Collection[SumProductPath[T]]
+) -> SumProductNode[T, Data]:
+    return SumProductNode(
+        node.sop,
+        frozendict[str, SumProductNode[T, Data]](
+            {
+                child_path: select_from_paths(
+                    node.children[child_path],
+                    {
+                        path[1:]
+                        for path in paths
+                        if path[0] == child_path and len(path) > 1
+                    },
+                )
+                for child_path in {path[0] for path in paths}
+            }
+        ),
+        node.data,
+    )
 
 
 A = TypeVar("A")
@@ -118,8 +189,25 @@ def map_node_data(
         replace(
             node,
             data=f(node.data),
-            children={
-                path: map_node_data(f, child) for path, child in node.children.items()
-            },
+            children=frozendict(
+                {path: map_node_data(f, child) for path, child in node.children.items()}
+            ),
         ),
+    )
+
+
+def clip_sop(
+    node: SumProductNode[T, Data], clip: SumProductNode[T, Any]
+) -> SumProductNode[T, Data]:
+    return SumProductNode(
+        node.sop,
+        frozendict[str, SumProductNode[T, Data]](
+            {
+                path: clip_sop(node_child, clip_child)
+                for path, clip_child in clip.children.items()
+                for node_child in (node.children.get(path),)
+                if node_child
+            }
+        ),
+        node.data,
     )

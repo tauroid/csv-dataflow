@@ -1,27 +1,28 @@
-from abc import ABC
 import csv
 from dataclasses import dataclass, replace
 from functools import cache
+from itertools import chain
 from pathlib import Path
+from pprint import pprint
 from typing import (
     Any,
-    Callable,
     Collection,
     Generic,
     Iterator,
     Literal,
     Self,
     TypeVar,
-    cast,
 )
 
 from .newtype import NewType
 from .sop import (
     SumProductNode,
     SumProductPath,
-    add_value_to_path,
+    add_paths,
+    clip_sop,
+    iter_sop_paths,
+    select_from_paths,
     sop_from_type,
-    map_node_data as map_sop_node_data,
 )
 
 DeBruijn = int
@@ -30,12 +31,8 @@ T = TypeVar("T")
 
 S = TypeVar("S")
 
-Data = TypeVar("Data", default=None)
-
-type Relation[S, T, Data=None] = (
-    BasicRelation[S, T, Data]
-    | ParallelRelation[S, T, Data]
-    | SeriesRelation[S, T, Data]
+type Relation[S, T] = (
+    BasicRelation[S, T] | ParallelRelation[S, T] | SeriesRelation[S, T]
 )
 
 
@@ -71,31 +68,8 @@ class RelationPath(Generic[S, T]):
         return separator.join(map(str, self.flat()))
 
 
-class IRelation(ABC, Generic[S, T]):
-    def at(self, path: RelationPath[S, T]) -> SumProductNode[Any, Data]:
-        assert path.relation_prefix == ()
-        match path.point:
-            case "Source":
-                return self.source.at(path.sop_path)
-            case "Target":
-                return self.target.at(path.sop_path)
-
-    def replace_at(
-        self, path: RelationPath[S, T], node: SumProductNode[Any, Data]
-    ) -> Self:
-        assert path.relation_prefix == ()
-        match path.point:
-            case "Source":
-                return replace(self, source=self.source.replace_at(path.sop_path, node))
-            case "Target":
-                return replace(self, target=self.target.replace_at(path.sop_path, node))
-
-    def replace_data_at(self, path: RelationPath[S, T], data: Data) -> Self:
-        return self.replace_at(path, replace(self.at(path), data=data))
-
-
 @dataclass(frozen=True)
-class BasicRelation(Generic[S, T], IRelation[S, T]):
+class BasicRelation(Generic[S, T]):
     """
     This is a binary relation, between all path groupings that "fill" the
     source or target path sets in the sense that for a particular grouping,
@@ -123,7 +97,7 @@ class Between(Generic[S, T]):
 
 
 @dataclass(frozen=True)
-class ParallelRelation(Generic[S, T], IRelation[S, T]):
+class ParallelRelation(Generic[S, T]):
     children: tuple[tuple[Relation[S, T], Between[S, T]], ...]
     """
     They are independently satisfiable, i.e. this is the union of the
@@ -135,7 +109,7 @@ class ParallelRelation(Generic[S, T], IRelation[S, T]):
 
 
 @dataclass(frozen=True)
-class SeriesRelation(Generic[S, T], IRelation[S, T]):
+class SeriesRelation(Generic[S, T]):
     stages: tuple[tuple[Relation[Any, Any], SumProductNode[Any]], ...]
     last_stage: Relation[Any, T]
 
@@ -186,15 +160,17 @@ End = Source | Target
 
 
 def parallel_relation_from_csv(
-    source_type: type[S], target_type: type[T], csv_path: Path
-) -> ParallelRelation[S, T]:
-    sop_s = sop_from_type(source_type)
-    sop_t = sop_from_type(target_type)
+    s: type[S], t: type[T], csv_path: Path
+) -> tuple[SumProductNode[S], SumProductNode[T], ParallelRelation[S, T]]:
+    sop_s = sop_from_type(s)
+    sop_t = sop_from_type(t)
 
     with open(csv_path) as f:
         csv_dict = csv.DictReader(f)
 
-        relations: list[BasicRelation[S, T]] = []
+        relation_paths: list[
+            tuple[list[SumProductPath[S]], list[SumProductPath[T]]]
+        ] = []
 
         for row in csv_dict:
             source_paths: list[SumProductPath[S]] = []
@@ -213,50 +189,63 @@ def parallel_relation_from_csv(
 
                 match end:
                     case Source():
-                        paths = paths_from_csv_column_name(
+                        for path in paths_from_csv_column_name(
                             sop_s, tuple(map(str.strip, name.split("/")))
-                        )
-                        for path in paths:
-                            add_value_to_path(sop_s, path, value)
+                        ):
                             source_paths.append((*path, value))
                     case Target():
-                        paths = paths_from_csv_column_name(
+                        for path in paths_from_csv_column_name(
                             sop_t, tuple(map(str.strip, name.split("/")))
-                        )
-                        for path in paths:
-                            add_value_to_path(sop_t, path, value)
+                        ):
                             target_paths.append((*path, value))
 
-            relations.append(
-                BasicRelation(sop_s, sop_t, tuple(source_paths), tuple(target_paths))
+            relation_paths.append((source_paths, target_paths))
+
+    all_source_paths = chain.from_iterable(p[0] for p in relation_paths)
+    all_target_paths = chain.from_iterable(p[1] for p in relation_paths)
+
+    sop_s = add_paths(sop_s, all_source_paths)
+    sop_t = add_paths(sop_t, all_target_paths)
+
+    return (
+        sop_s,
+        sop_t,
+        ParallelRelation(
+            tuple(
+                (
+                    BasicRelation(
+                        select_from_paths(sop_s, source_paths),
+                        select_from_paths(sop_t, target_paths),
+                    ),
+                    Between((), ()),
+                )
+                for source_paths, target_paths in relation_paths
             )
+        ),
+    )
 
-    return ParallelRelation(sop_s, sop_t, tuple(relations))
 
-
-def iter_relation_paths(relation: Relation[S, T, Data]) -> Iterator[RelationPath[S, T]]:
+def iter_relation_paths(relation: Relation[S, T]) -> Iterator[RelationPath[S, T]]:
     match relation:
-        case BasicRelation(source_paths=source_paths, target_paths=target_paths):
-            for path in source_paths:
+        case BasicRelation(source=source, target=target):
+            for path in iter_sop_paths(source):
                 yield RelationPath("Source", path)
-            for path in target_paths:
+            for path in iter_sop_paths(target):
                 yield RelationPath("Target", path)
         case ParallelRelation(children=children):
-            for child in children:
+            for child, _ in children:
                 for path in iter_relation_paths(child):
                     yield path
         case SeriesRelation():
             raise NotImplementedError
 
 
-def iter_basic_relations(
-    relation: Relation[S, T, Data]
-) -> Iterator[BasicRelation[S, T, Data]]:
+def iter_basic_relations(relation: Relation[S, T]) -> Iterator[BasicRelation[S, T]]:
     match relation:
         case BasicRelation():
             yield relation
         case ParallelRelation(children=children):
-            for child in children:
+            for child, _ in children:
                 for descendant in iter_basic_relations(child):
                     yield descendant
         case SeriesRelation():
@@ -264,8 +253,8 @@ def iter_basic_relations(
 
 
 def filter_relation(
-    relation: Relation[S, T, Data], filter_paths: Collection[RelationPath[S, T]]
-) -> Relation[S, T, Data] | None:
+    relation: Relation[S, T], filter_paths: Collection[RelationPath[S, T]]
+) -> Relation[S, T] | None:
     """
     Reduces to BasicRelations connecting something in the
     subtree of at least one of `paths`
@@ -279,9 +268,9 @@ def filter_relation(
 
                 match filter_path.point:
                     case "Source":
-                        relation_paths = relation.source_paths
+                        relation_paths = iter_sop_paths(relation.source)
                     case "Target":
-                        relation_paths = relation.target_paths
+                        relation_paths = iter_sop_paths(relation.target)
 
                 for path in relation_paths:
                     if path[:n] == filter_path.sop_path:
@@ -291,8 +280,8 @@ def filter_relation(
 
         case ParallelRelation(children=children):
             filtered_children = tuple(
-                filtered_child
-                for child in children
+                (filtered_child, between)
+                for child, between in children
                 for filtered_child in (filter_relation(child, filter_paths),)
                 if filtered_child is not None
             )
@@ -310,57 +299,28 @@ A = TypeVar("A")
 B = TypeVar("B")
 
 
-def replace_source_and_target(
-    relation: Relation[S, T, Any],
-    new_source: SumProductNode[S, Data],
-    new_target: SumProductNode[T, Data],
-) -> Relation[S, T, Data]:
-    match relation:
-        case BasicRelation(source_paths=source_paths, target_paths=target_paths):
-            clipped_source_paths = tuple(
-                set(new_source.clip_path(source_path) for source_path in source_paths)
-            )
-            clipped_target_paths = tuple(
-                set(new_target.clip_path(target_path) for target_path in target_paths)
-            )
-            return BasicRelation(
-                new_source, new_target, clipped_source_paths, clipped_target_paths
-            )
-        case ParallelRelation(children=children):
-            return ParallelRelation(
-                new_source,
-                new_target,
-                tuple(
-                    replace_source_and_target(child, new_source, new_target)
-                    for child in children
-                ),
-            )
-        case SeriesRelation():
-            raise NotImplementedError
-
-
-def map_node_data(
-    f: Callable[[A], B], relation: Relation[S, T, A]
-) -> Relation[S, T, B]:
+def clip_relation(
+    relation: Relation[S, T],
+    source_clip: SumProductNode[S, Any],
+    target_clip: SumProductNode[T, Any],
+) -> Relation[S, T]:
     match relation:
         case BasicRelation(source, target):
-            return cast(
-                BasicRelation[S, T, B],
-                replace(
-                    relation,
-                    source=map_sop_node_data(f, source),
-                    target=map_sop_node_data(f, target),
-                ),
+            return BasicRelation(
+                clip_sop(source, source_clip), clip_sop(target, target_clip)
             )
-        case ParallelRelation(source, target, children):
-            return cast(
-                ParallelRelation[S, T, B],
-                replace(
-                    relation,
-                    source=map_sop_node_data(f, source),
-                    target=map_sop_node_data(f, target),
-                    children=tuple(map_node_data(f, child) for child in children),
-                ),
+        case ParallelRelation(children):
+            # TODO needs changing when I use Between properly
+            return ParallelRelation(
+                tuple(
+                    dict(
+                        (
+                            (clip_relation(child, source_clip, target_clip), between),
+                            None,
+                        )
+                        for child, between in children
+                    ).keys()
+                )
             )
         case SeriesRelation():
             raise NotImplementedError

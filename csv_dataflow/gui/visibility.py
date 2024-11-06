@@ -1,6 +1,5 @@
 from typing import TypeVar
 
-from ..relation import Relation, replace_source_and_target
 from ..sop import SumProductNode
 
 S = TypeVar("S")
@@ -51,14 +50,3 @@ def compute_visible_sop(
             )
 
     return node
-
-
-def compute_visible_relation(
-    selected: Relation[S, T, bool],
-    expanded: Relation[S, T, bool],
-) -> Relation[S, T, bool]:
-    source_visible = compute_visible_sop(selected.source, expanded.source)
-    target_visible = compute_visible_sop(selected.target, expanded.target)
-    assert source_visible
-    assert target_visible
-    return replace_source_and_target(selected, source_visible, target_visible)
