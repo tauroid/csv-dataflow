@@ -278,22 +278,24 @@ def sop_html(
         else:
             hx_attrs = f'hx-delete="{expand_path}" hx-swap="outerHTML" hx-target="closest .{sop_class}"'
 
-        child_htmls = (
-            sop_html(
-                child,
-                filtered_relation or replace(relation, children=()),
-                child_path,
-            )
-            for child_label, child in sop.children.items()
-            for child_path in (replace(path, sop_path=(*path.sop_path, child_label)),)
-            for filtered_relation in (filter_relation(relation, (child_path,)),)
-        )
+        def iter_child_htmls():
+            for child_label, child in sop.children.items():
+                assert not isinstance(
+                    child, int
+                ), "Should have unrolled any recursion by now"
+                child_path = replace(path, sop_path=(*path.sop_path, child_label))
+                filtered_relation = filter_relation(relation, (child_path,))
+                yield sop_html(
+                    child,
+                    filtered_relation or replace(relation, children=()),
+                    child_path,
+                )
 
         return inspect.cleandoc(
             f"""
             <div class="{sop_class}">
                 <div id="{path_id}" _="{hover}" {hx_attrs}>{label}</div>
-                <div>{"".join(child_htmls)}</div>
+                <div>{"".join(iter_child_htmls())}</div>
             </div>
             """
         )

@@ -3,7 +3,6 @@ from dataclasses import dataclass, replace
 from functools import cache
 from itertools import chain
 from pathlib import Path
-from pprint import pprint
 from typing import (
     Any,
     Collection,
@@ -98,13 +97,14 @@ class Between(Generic[S, T]):
 
 @dataclass(frozen=True)
 class ParallelRelation(Generic[S, T]):
-    children: tuple[tuple[Relation[S, T], Between[S, T]], ...]
+    children: tuple[tuple[Relation[Any, Any] | DeBruijn, Between[S, T]], ...]
     """
     They are independently satisfiable, i.e. this is the union of the
-    child relations plus any (g ∪ m, h ∪ n) for any (g,h), (m,n) coming
-    from child relations (the g ∪ m, h ∪ n need not fill any union of
-    child path sets, although they will fill the union of the ones they
-    came from (because every member of each path set is already satisfied)).
+    child relations plus any (s1 ∪ s2, t1 ∪ t2) for any (s1,t1), (s2,t2)
+    coming from child relations (the s1 ∪ s2, t1 ∪ t2 need not fill any
+    union of child path sets, although they will fill the union of the
+    ones they came from (because every member of each path set is
+    already satisfied)).
     """
 
 
