@@ -20,6 +20,8 @@ from frozendict import frozendict
 
 SumOrProduct = Literal["+", "*"]
 
+DeBruijn = int
+
 
 T = TypeVar("T")
 Data = TypeVar("Data", default=None)
@@ -41,7 +43,7 @@ class SumProductNode(Generic[T, Data]):
     """
 
     sop: SumOrProduct
-    children: Mapping[str, "SumProductNode[Any, Data]"]
+    children: Mapping[str, "SumProductNode[Any, Data] | DeBruijn"]
     """The key is the path member"""
     data: Data = cast(Data, None)
 
@@ -95,6 +97,20 @@ def sop_from_type(t: type[T]) -> SumProductNode[T]:
     elif is_dataclass(t):
         sop = "*"
         child_types = {field.name: field.type for field in fields(t)}
+    elif get_origin(t) in (tuple, list):
+        return SumProductNode(
+            "+",
+            frozendict[str, SumProductNode[Any]]({
+                "empty": UNIT,
+                "list": SumProductNode(
+                    "*",
+                    frozendict[str, SumProductNode[Any]]({
+                        "head": sop_from_type(get_args(t)[0]),
+                        "tail": 1
+                    })
+                )
+            })
+        )
     else:
         # Assume remaining types are primitive i.e. sum
         # Not actually true, will want to think about lists etc
