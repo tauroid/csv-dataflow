@@ -234,6 +234,9 @@ def iter_relation_paths(relation: Relation[S, T]) -> Iterator[RelationPath[S, T]
                 yield RelationPath("Target", path)
         case ParallelRelation(children=children):
             for child, _ in children:
+                assert not isinstance(
+                    child, int
+                ), "Flat iterating over a recursive relation is probably a mistake"
                 for path in iter_relation_paths(child):
                     yield path
         case SeriesRelation():
@@ -246,6 +249,9 @@ def iter_basic_relations(relation: Relation[S, T]) -> Iterator[BasicRelation[S, 
             yield relation
         case ParallelRelation(children=children):
             for child, _ in children:
+                assert not isinstance(
+                    child, int
+                ), "Flat iterating over a recursive relation is probably a mistake"
                 for descendant in iter_basic_relations(child):
                     yield descendant
         case SeriesRelation():
@@ -258,6 +264,8 @@ def filter_relation(
     """
     Reduces to BasicRelations connecting something in the
     subtree of at least one of `paths`
+
+    TODO not using Between properly yet
     """
     match relation:
         case BasicRelation():

@@ -115,21 +115,21 @@ def sop_from_type(t: type[T]) -> SumProductNode[T]:
     elif is_dataclass(t):
         sop = "*"
         child_types = {field.name: field.type for field in fields(t)}
-    # elif get_origin(t) in (tuple, list):
-    #     return SumProductNode(
-    #         "+",
-    #         frozendict[str, SumProductChild](
-    #             {
-    #                 "empty": UNIT,
-    #                 "list": SumProductNode(
-    #                     "*",
-    #                     frozendict[str, SumProductChild](
-    #                         {"head": sop_from_type(get_args(t)[0]), "tail": 1}
-    #                     ),
-    #                 ),
-    #             }
-    #         ),
-    #     )
+    elif get_origin(t) in (tuple, list):
+        return SumProductNode(
+            "+",
+            frozendict[str, SumProductChild](
+                {
+                    "empty": UNIT,
+                    "list": SumProductNode(
+                        "*",
+                        frozendict[str, SumProductChild](
+                            {"head": sop_from_type(get_args(t)[0]), "tail": 1}
+                        ),
+                    ),
+                }
+            ),
+        )
     else:
         # Assume remaining types are primitive i.e. sum
         sop = "+"
