@@ -1,4 +1,5 @@
 import csv
+from frozendict import frozendict
 from itertools import chain
 from pathlib import Path
 from typing import Any, Iterator, TypeVar
@@ -12,18 +13,50 @@ T = TypeVar("T")
 
 
 # FIXME make this take all column names and produce a tree
-def filter_by_csv_column_names(
+def select_given_csv_column_names(
     sop: SumProductNode[T],
-    name_paths: tuple[str, ...],
-    prefix: SumProductPath[Any] = (),
-    immediate: bool = False,
+    name_paths: tuple[tuple[str, ...], ...],
+    immediate_name_paths: tuple[tuple[str, ...], ...] = (),
     prev_stack: ConsList[SumProductNode[T]] = None,
     recurse: bool = True,
-) -> SumProductNode[T]]:
+) -> SumProductNode[T]:
+    if () in immediate_name_paths:
+        # We matched to the end of a name_path
+        return sop
+
     stack = Cons(sop, prev_stack)
-    name = name_path[0]
-    something_matched = False
-    for key, child in sop.children.items():
+
+    def immediate_name_paths_for(child_path: str) -> tuple[tuple[str, ...], ...]:
+        return (
+            *(tuple(tail) for head, *tail in name_paths if head == child_path),
+            *(
+                tuple(tail)
+                for head, *tail in immediate_name_paths
+                if head == child_path
+            ),
+        )
+
+    # Get results for all children
+    filtered_children = {
+        path: select_given_csv_column_names(
+            child if not isinstance(child, int) else at_index(stack, child),
+            name_paths,
+            immediate_name_paths_for(path),
+            stack,
+            # Once we've recursed, don't do it again as we'll
+            # uncover all we need to in the first traversal
+            # FIXME actually this is only unless the name path
+            #       can only match 2+ loops through. so maybe
+            #       allow immediate paths to force recursion
+            recurse and not isinstance(child, int)
+        )
+        for path, child in sop.children.items()
+        if not isinstance(child, int) or recurse
+    }
+
+    # FIXME get rid of children with no children that don't match here
+
+    for path, child in sop.children.items():
         new_prefix = (*prefix, key)
         if key == name:  # FIXME allow the docstring heading too
             something_matched = True
@@ -44,11 +77,6 @@ def filter_by_csv_column_names(
             if not immediate:
                 for path in paths_from_csv_column_name(child, name_path, new_prefix):
                     yield path
-
-    if immediate and not something_matched:
-        raise ValueError(
-            f"{name_path} didn't match any immediate child {sop.children.keys()}"
-        )
 
 
 class Source: ...
