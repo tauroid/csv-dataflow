@@ -1,25 +1,70 @@
 import csv
+from dataclasses import replace
 from frozendict import frozendict
-from itertools import chain
+from itertools import chain, repeat
 from pathlib import Path
 from typing import Any, Iterator, TypeVar
 
 from .cons import Cons, ConsList, at_index
-from .relation import ParallelRelation
-from .sop import SumProductNode, SumProductPath, sop_from_type
+from .relation import BasicRelation, Between, ParallelRelation
+from .sop import (
+    SumProductChild,
+    SumProductNode,
+    SumProductPath,
+    add_paths,
+    sop_from_type,
+)
 
 S = TypeVar("S")
 T = TypeVar("T")
 
 
-# FIXME make this take all column names and produce a tree
-def select_given_csv_column_names(
+def only_has_de_bruijn_indices(sop: SumProductNode[T]) -> bool:
+    if not sop.children:
+        # Terminal node is data
+        return False
+
+    return all(
+        isinstance(child, int) or only_has_de_bruijn_indices(child)
+        for child in sop.children.values()
+    )
+
+
+def max_de_bruijn_index_relative_to_current_node(sop: SumProductNode[T]) -> int:
+    """0 is the argument, 1 is node above, etc"""
+
+    if not sop.children:
+        # This suits if the purpose is just to tell if the node doesn't
+        # refer outside itself
+        return 0
+
+    return max(
+        (
+            child
+            if isinstance(child, int)
+            else max_de_bruijn_index_relative_to_current_node(child) - 1
+        )
+        for child in sop.children.values()
+    )
+
+
+def empty_recursion(sop: SumProductNode[T]) -> bool:
+    return (
+        only_has_de_bruijn_indices(sop)
+        and max_de_bruijn_index_relative_to_current_node(sop) == 0
+    )
+
+
+def select_given_csv_values(
     sop: SumProductNode[T],
     name_paths: tuple[tuple[str, ...], ...],
     immediate_name_paths: tuple[tuple[str, ...], ...] = (),
     prev_stack: ConsList[SumProductNode[T]] = None,
-    recurse: bool = True,
 ) -> SumProductNode[T]:
+    """
+    Will also include open de Bruijn indices as they could still
+    be put in a context that matches
+    """
     if () in immediate_name_paths:
         # We matched to the end of a name_path
         return sop
@@ -36,47 +81,79 @@ def select_given_csv_column_names(
             ),
         )
 
-    # Get results for all children
-    filtered_children = {
-        path: select_given_csv_column_names(
-            child if not isinstance(child, int) else at_index(stack, child),
-            name_paths,
-            immediate_name_paths_for(path),
-            stack,
-            # Once we've recursed, don't do it again as we'll
-            # uncover all we need to in the first traversal
-            # FIXME actually this is only unless the name path
-            #       can only match 2+ loops through. so maybe
-            #       allow immediate paths to force recursion
-            recurse and not isinstance(child, int)
-        )
-        for path, child in sop.children.items()
-        if not isinstance(child, int) or recurse
+    child_immediate_name_paths = {
+        path: immediate_name_paths_for(path) for path in sop.children
     }
 
-    # FIXME get rid of children with no children that don't match here
-
-    for path, child in sop.children.items():
-        new_prefix = (*prefix, key)
-        if key == name:  # FIXME allow the docstring heading too
-            something_matched = True
-            if len(name_path) == 1:
-                yield new_prefix
-            else:
-                unrolled_child = (
-                    at_index(stack, child) if isinstance(child, int) else child
+    # Apply this function to all children
+    filtered_children = {
+        path: filtered_child
+        for path, child in sop.children.items()
+        for filtered_child in (
+            (
+                (
+                    select_given_csv_values(
+                        child if not isinstance(child, int) else at_index(stack, child),
+                        # No new matches in the mirror realm
+                        name_paths if not isinstance(child, int) else (),
+                        child_immediate_name_paths[path],
+                        stack,
+                    )
                 )
-                for path in paths_from_csv_column_name(
-                    unrolled_child, name_path[1:], new_prefix, True, stack
-                ):
-                    yield path
-        else:
-            if isinstance(child, int):
-                continue
+                if not isinstance(child, int) or child_immediate_name_paths[path]
+                else child
+            ),
+        )
+    }
 
-            if not immediate:
-                for path in paths_from_csv_column_name(child, name_path, new_prefix):
-                    yield path
+    # Filter down to children that:
+    #   - Have real data in their (filtered) children, or
+    #   - Are selected by a path, or
+    #   - Have (or are) de Bruijn indices that remain open above
+    #     the current node's level
+    selected_children_with_data_or_open_de_bruijn_indices = {
+        path: child
+        for path, child in filtered_children.items()
+        if (
+            not isinstance(child, int)
+            and (
+                (
+                    child.children
+                    and (
+                        not only_has_de_bruijn_indices(child)
+                        or max_de_bruijn_index_relative_to_current_node(child) > 1
+                    )
+                )
+                or (not child.children and (path,) in name_paths)
+            )
+        )
+        or (isinstance(child, int) and child > 0)
+    }
+
+    return replace(
+        sop,
+        children=frozendict[str, SumProductChild](
+            {
+                **selected_children_with_data_or_open_de_bruijn_indices,
+                # de Bruijn indices directly referencing this node, only
+                # if this node has other children with actual data / open indices
+                **(
+                    {
+                        path: child
+                        for path, child in filtered_children.items()
+                        if (isinstance(child, int) and child == 0)
+                        or (
+                            not isinstance(child, int)
+                            and only_has_de_bruijn_indices(child)
+                            and max_de_bruijn_index_relative_to_current_node(child) == 1
+                        )
+                    }
+                    if len(selected_children_with_data_or_open_de_bruijn_indices) > 0
+                    else {}
+                ),
+            }
+        ),
+    )
 
 
 class Source: ...
@@ -88,22 +165,27 @@ class Target: ...
 End = Source | Target
 
 
+def csv_name_to_name_path(csv_name: str) -> tuple[str, ...]:
+    return tuple(map(str.strip, csv_name.split("/")))
+
+
 def parallel_relation_from_csv(
     s: type[S], t: type[T], csv_path: Path
 ) -> tuple[SumProductNode[S], SumProductNode[T], ParallelRelation[S, T]]:
     sop_s = sop_from_type(s)
     sop_t = sop_from_type(t)
 
+    relations: list[BasicRelation[S, T]] = []
+
+    all_source_value_paths: list[tuple[str, ...]] = []
+    all_target_value_paths: list[tuple[str, ...]] = []
+
     with open(csv_path) as f:
         csv_dict = csv.DictReader(f)
 
-        relation_paths: list[
-            tuple[list[SumProductPath[S]], list[SumProductPath[T]]]
-        ] = []
-
         for row in csv_dict:
-            source_paths: list[SumProductPath[S]] = []
-            target_paths: list[SumProductPath[T]] = []
+            source_value_paths: list[tuple[str, ...]] = []
+            target_value_paths: list[tuple[str, ...]] = []
 
             end: End = Source()
             for name, value in row.items():
@@ -116,39 +198,26 @@ def parallel_relation_from_csv(
                 if value == "":
                     continue
 
+                value_path = (*csv_name_to_name_path(name), value)
+
                 match end:
                     case Source():
-                        for path in paths_from_csv_column_name(
-                            sop_s, tuple(map(str.strip, name.split("/")))
-                        ):
-                            source_paths.append((*path, value))
+                        source_value_paths.append(value_path)
+                        all_source_value_paths.append(value_path)
                     case Target():
-                        for path in paths_from_csv_column_name(
-                            sop_t, tuple(map(str.strip, name.split("/")))
-                        ):
-                            target_paths.append((*path, value))
+                        target_value_paths.append(value_path)
+                        all_target_value_paths.append(value_path)
 
-            relation_paths.append((source_paths, target_paths))
-
-    all_source_paths = chain.from_iterable(p[0] for p in relation_paths)
-    all_target_paths = chain.from_iterable(p[1] for p in relation_paths)
-
-    sop_s = add_paths(sop_s, all_source_paths)
-    sop_t = add_paths(sop_t, all_target_paths)
+            relations.append(
+                BasicRelation(
+                    select_given_csv_values(sop_s, tuple(source_value_paths)),
+                    select_given_csv_values(sop_t, tuple(target_value_paths)),
+                )
+            )
 
     return (
-        sop_s,
-        sop_t,
-        ParallelRelation(
-            tuple(
-                (
-                    BasicRelation(
-                        select_from_paths(sop_s, source_paths),
-                        select_from_paths(sop_t, target_paths),
-                    ),
-                    Between((), ()),
-                )
-                for source_paths, target_paths in relation_paths
-            )
-        ),
+        # FIXME this needs to be like merge_sop(sop_s, select_given_csv_values(sop_s, all_source_value_paths)) instead
+        add_paths(sop_s, all_source_value_paths),
+        add_paths(sop_t, all_target_value_paths),
+        ParallelRelation(tuple(zip(relations, repeat(Between[S, T]((), ()))))),
     )
