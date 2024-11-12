@@ -1,4 +1,5 @@
 from dataclasses import dataclass, fields, is_dataclass, replace
+from itertools import chain
 import types
 from typing import (
     Any,
@@ -164,6 +165,9 @@ def add_paths(
 ) -> SumProductNode[T]:
     paths_tuple = tuple(paths)
 
+    if not paths_tuple:
+        return node
+
     def paths_at(element: str) -> Iterator[SumProductPath[T]]:
         for path in paths_tuple:
             if path[0] == element and len(path) > 1:
@@ -187,7 +191,7 @@ def add_paths(
         children = frozendict[str, SumProductChild](
             {
                 child_path: add_paths(
-                    SumProductNode("+", {}),
+                    VOID,
                     paths_at(child_path),
                 )
                 for child_path in {path[0]: None for path in paths_tuple}.keys()
@@ -286,3 +290,49 @@ def clip_sop(
     )
 
 
+def merge_sops(
+    *sops: SumProductNode[T, Data]
+) -> SumProductNode[T, Data]:
+    first, *rest = sops
+
+    assert all(sop.sop == first.sop and sop.data == first.data for sop in rest)
+
+    child_paths = tuple(map(lambda sop: sop.children.keys(), sops))
+
+    all_child_paths = {x: None for x in chain.from_iterable(child_paths)}.keys()
+
+    recursion_paths: list[str] = []
+
+    # Make sure they have the same recursion structure, not dealing
+    # with it otherwise
+    for path in all_child_paths:
+        first_child, *rest_children = filter(
+            None, (sop.children.get(path) for sop in sops)
+        )
+        if isinstance(first_child, int):
+            for child in rest_children:
+                assert first_child == child
+            recursion_paths.append(path)
+        else:
+            for child in rest_children:
+                # This should make the cast below safe
+                assert not isinstance(child, int)
+
+    return replace(
+        first,
+        children=frozendict[str, SumProductChild[Data]](
+            {
+                path: (
+                    children[0]
+                    if path in recursion_paths
+                    else merge_sops(
+                        *cast(tuple[SumProductNode[T, Data], ...], children)
+                    )
+                )
+                for path in all_child_paths
+                for children in (
+                    tuple(filter(None, (sop.children.get(path) for sop in sops))),
+                )
+            }
+        ),
+    )

@@ -12,6 +12,7 @@ from .sop import (
     SumProductNode,
     SumProductPath,
     add_paths,
+    merge_sops,
     sop_from_type,
 )
 
@@ -55,7 +56,7 @@ def empty_recursion(sop: SumProductNode[T]) -> bool:
     )
 
 
-def select_given_csv_values(
+def select_given_csv_paths(
     sop: SumProductNode[T],
     name_paths: tuple[tuple[str, ...], ...],
     immediate_name_paths: tuple[tuple[str, ...], ...] = (),
@@ -92,7 +93,7 @@ def select_given_csv_values(
         for filtered_child in (
             (
                 (
-                    select_given_csv_values(
+                    select_given_csv_paths(
                         child if not isinstance(child, int) else at_index(stack, child),
                         # No new matches in the mirror realm
                         name_paths if not isinstance(child, int) else (),
@@ -208,16 +209,24 @@ def parallel_relation_from_csv(
                         target_value_paths.append(value_path)
                         all_target_value_paths.append(value_path)
 
+            source_value_paths_tuple = tuple(source_value_paths)
+            target_value_paths_tuple = tuple(target_value_paths)
+
             relations.append(
                 BasicRelation(
-                    select_given_csv_values(sop_s, tuple(source_value_paths)),
-                    select_given_csv_values(sop_t, tuple(target_value_paths)),
+                    select_given_csv_paths(
+                        add_paths(sop_s, source_value_paths_tuple),
+                        source_value_paths_tuple,
+                    ),
+                    select_given_csv_paths(
+                        add_paths(sop_t, target_value_paths_tuple),
+                        target_value_paths_tuple,
+                    ),
                 )
             )
 
     return (
-        # FIXME this needs to be like merge_sop(sop_s, select_given_csv_values(sop_s, all_source_value_paths)) instead
-        add_paths(sop_s, all_source_value_paths),
-        add_paths(sop_t, all_target_value_paths),
+        add_paths(sop_s, tuple(all_source_value_paths)),
+        add_paths(sop_t, tuple(all_target_value_paths)),
         ParallelRelation(tuple(zip(relations, repeat(Between[S, T]((), ()))))),
     )
