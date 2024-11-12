@@ -209,7 +209,13 @@ def select_from_paths(
     node: SumProductNode[T, Data],
     paths: Collection[SumProductPath[T]],
     prev_stack: ConsList[SumProductNode[Any, Data]] = None,
-) -> SumProductNode[T, Data]:
+) -> SumProductNode[T, Data] | None:
+    if not paths:
+        return None
+
+    if () in paths:
+        return node
+
     stack = Cons(node, prev_stack)
 
     children_dict: dict[str, SumProductChild[Data]] = {}
@@ -220,7 +226,7 @@ def select_from_paths(
         else:
             unrolled_child = child
 
-        children_dict[child_path] = select_from_paths(
+        filtered_child = select_from_paths(
             unrolled_child,
             {
                 path[1:]: None
@@ -229,6 +235,12 @@ def select_from_paths(
             }.keys(),
             stack,
         )
+
+        if filtered_child:
+            children_dict[child_path] = filtered_child
+
+    if not children_dict:
+        return None
 
     return SumProductNode(
         node.sop,
@@ -335,4 +347,39 @@ def merge_sops(
                 )
             }
         ),
+    )
+
+def only_has_de_bruijn_indices(sop: SumProductNode[T]) -> bool:
+    if not sop.children:
+        # Terminal node is data
+        return False
+
+    return all(
+        isinstance(child, int) or only_has_de_bruijn_indices(child)
+        for child in sop.children.values()
+    )
+
+
+def max_de_bruijn_index_relative_to_current_node(sop: SumProductNode[T]) -> int:
+    """0 is the argument, 1 is node above, etc"""
+
+    if not sop.children:
+        # This suits if the purpose is just to tell if the node doesn't
+        # refer outside itself
+        return 0
+
+    return max(
+        (
+            child
+            if isinstance(child, int)
+            else max_de_bruijn_index_relative_to_current_node(child) - 1
+        )
+        for child in sop.children.values()
+    )
+
+
+def empty_recursion(sop: SumProductNode[T]) -> bool:
+    return (
+        only_has_de_bruijn_indices(sop)
+        and max_de_bruijn_index_relative_to_current_node(sop) > 1
     )

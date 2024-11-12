@@ -16,6 +16,7 @@ from .sop import (
     SumProductPath,
     clip_sop,
     iter_sop_paths,
+    select_from_paths,
 )
 
 DeBruijn = int
@@ -146,6 +147,38 @@ def iter_basic_relations(relation: Relation[S, T]) -> Iterator[BasicRelation[S, 
         case SeriesRelation():
             raise NotImplementedError
 
+def only_has_de_bruijn_indices(relation: Relation[S,T]) -> bool:
+    match relation:
+        case BasicRelation():
+            return False
+        case ParallelRelation(children):
+            return all(isinstance(child, int) or only_has_de_bruijn_indices(child) for child, _ in children)
+        case SeriesRelation():
+            raise NotImplementedError
+
+
+def max_de_bruijn_index_relative_to_current_node(relation: Relation[S,T]) -> int:
+    """0 is the argument, 1 is node above, etc"""
+
+    match relation:
+        case BasicRelation():
+            return 0
+        case ParallelRelation(children):
+            return max(
+                (
+                    child if isinstance(child, int)
+                    else max_de_bruijn_index_relative_to_current_node(child) - 1
+                )
+                for child, _ in children
+            )
+        case SeriesRelation():
+            raise NotImplementedError
+
+def empty_recursion(relation: Relation[S, T]) -> bool:
+    return (
+        only_has_de_bruijn_indices(relation)
+        and max_de_bruijn_index_relative_to_current_node(relation) > 1
+    )
 
 def filter_relation(
     relation: Relation[S, T], filter_paths: Collection[RelationPath[S, T]]
@@ -158,29 +191,37 @@ def filter_relation(
     """
     match relation:
         case BasicRelation():
-            for filter_path in filter_paths:
-                n = len(filter_path.sop_path)
+            source_paths = tuple(
+                map(
+                    lambda p: p.sop_path,
+                    filter(lambda p: p.point == "Source", filter_paths),
+                )
+            )
 
-                assert filter_path.relation_prefix == ()
+            if select_from_paths(relation.source, source_paths):
+                return relation
 
-                match filter_path.point:
-                    case "Source":
-                        relation_paths = iter_sop_paths(relation.source)
-                    case "Target":
-                        relation_paths = iter_sop_paths(relation.target)
+            target_paths = tuple(
+                map(
+                    lambda p: p.sop_path,
+                    filter(lambda p: p.point == "Target", filter_paths),
+                )
+            )
 
-                for path in relation_paths:
-                    if path[:n] == filter_path.sop_path:
-                        return relation
+            if select_from_paths(relation.target, target_paths):
+                return relation
 
             return None
 
+        # FIXME something similar to select_given_csv_paths I think
+        #       probably need to abstract a bit
         case ParallelRelation(children=children):
             filtered_children = tuple(
                 (filtered_child, between)
                 for child, between in children
+                if not isinstance(child, int)
                 for filtered_child in (filter_relation(child, filter_paths),)
-                if filtered_child is not None
+                if filtered_child is not None and not empty_recursion(filtered_child)
             )
 
             if not filtered_children:
@@ -206,17 +247,22 @@ def clip_relation(
             return BasicRelation(
                 clip_sop(source, source_clip), clip_sop(target, target_clip)
             )
+
         case ParallelRelation(children):
             # TODO needs changing when I use Between properly
             return ParallelRelation(
                 tuple(
-                    dict(
+                    {
                         (
-                            (clip_relation(child, source_clip, target_clip), between),
-                            None,
-                        )
+                            (
+                                clip_relation(child, source_clip, target_clip)
+                                if not isinstance(child, int)
+                                else child
+                            ),
+                            between,
+                        ): None
                         for child, between in children
-                    ).keys()
+                    }.keys()
                 )
             )
         case SeriesRelation():
