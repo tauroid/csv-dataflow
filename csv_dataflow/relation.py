@@ -147,17 +147,21 @@ def iter_basic_relations(relation: Relation[S, T]) -> Iterator[BasicRelation[S, 
         case SeriesRelation():
             raise NotImplementedError
 
-def only_has_de_bruijn_indices(relation: Relation[S,T]) -> bool:
+
+def only_has_de_bruijn_indices(relation: Relation[S, T]) -> bool:
     match relation:
         case BasicRelation():
             return False
         case ParallelRelation(children):
-            return all(isinstance(child, int) or only_has_de_bruijn_indices(child) for child, _ in children)
+            return all(
+                isinstance(child, int) or only_has_de_bruijn_indices(child)
+                for child, _ in children
+            )
         case SeriesRelation():
             raise NotImplementedError
 
 
-def max_de_bruijn_index_relative_to_current_node(relation: Relation[S,T]) -> int:
+def max_de_bruijn_index_relative_to_current_node(relation: Relation[S, T]) -> int:
     """0 is the argument, 1 is node above, etc"""
 
     match relation:
@@ -166,7 +170,8 @@ def max_de_bruijn_index_relative_to_current_node(relation: Relation[S,T]) -> int
         case ParallelRelation(children):
             return max(
                 (
-                    child if isinstance(child, int)
+                    child
+                    if isinstance(child, int)
                     else max_de_bruijn_index_relative_to_current_node(child) - 1
                 )
                 for child, _ in children
@@ -174,11 +179,13 @@ def max_de_bruijn_index_relative_to_current_node(relation: Relation[S,T]) -> int
         case SeriesRelation():
             raise NotImplementedError
 
+
 def empty_recursion(relation: Relation[S, T]) -> bool:
     return (
         only_has_de_bruijn_indices(relation)
-        and max_de_bruijn_index_relative_to_current_node(relation) > 1
+        and max_de_bruijn_index_relative_to_current_node(relation) <= 0
     )
+
 
 def filter_relation(
     relation: Relation[S, T], filter_paths: Collection[RelationPath[S, T]]
@@ -213,21 +220,27 @@ def filter_relation(
 
             return None
 
-        # FIXME something similar to select_given_csv_paths I think
-        #       probably need to abstract a bit
         case ParallelRelation(children=children):
-            filtered_children = tuple(
-                (filtered_child, between)
-                for child, between in children
-                if not isinstance(child, int)
-                for filtered_child in (filter_relation(child, filter_paths),)
-                if filtered_child is not None and not empty_recursion(filtered_child)
+            filtered_relation = replace(
+                relation,
+                children=tuple(
+                    (filtered_child, between)
+                    for child, between in children
+                    for filtered_child in (
+                        (
+                            filter_relation(child, filter_paths)
+                            if not isinstance(child, int)
+                            else child
+                        ),
+                    )
+                    if filtered_child is not None
+                ),
             )
 
-            if not filtered_children:
+            if not filtered_relation.children or empty_recursion(filtered_relation):
                 return None
-            else:
-                return replace(relation, children=filtered_children)
+
+            return filtered_relation
 
         case SeriesRelation():
             raise NotImplementedError

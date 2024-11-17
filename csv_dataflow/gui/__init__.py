@@ -12,6 +12,7 @@ from pprint import pprint
 
 from examples.ex1.types import A, B
 
+from ..csv import parallel_relation_from_csv
 from ..relation import (
     BasicRelation,
     ParallelRelation,
@@ -22,9 +23,8 @@ from ..relation import (
     filter_relation,
     iter_basic_relations,
     iter_relation_paths,
-    parallel_relation_from_csv,
 )
-from ..sop import SumProductNode, SumProductPath, map_node_data, sop_from_type
+from ..sop import DeBruijn, SumProductNode, SumProductPath, map_node_data, sop_from_type
 
 from .visibility import compute_visible_sop
 
@@ -256,14 +256,8 @@ def highlight_related_on_hover(relation: Relation[S, T]) -> str:
 
 
 def sop_html(
-    sop: SumProductNode[Any, bool], relation: Relation[S, T], path: RelationPath[S, T]
+    sop: SumProductNode[Any, bool] | DeBruijn, relation: Relation[S, T], path: RelationPath[S, T]
 ) -> str:
-    match sop.sop:
-        case "+":
-            sop_class = "sum"
-        case "*":
-            sop_class = "product"
-
     expand_path = f"/expanded/{path.to_str()}"
     path_id = f"{path.to_str(":")}"
 
@@ -271,7 +265,13 @@ def sop_html(
 
     label = path.flat()[-1]
 
-    if sop.children:
+    if isinstance(sop, SumProductNode) and sop.children:
+        match sop.sop:
+            case "+":
+                sop_class = "sum"
+            case "*":
+                sop_class = "product"
+
         if not path.sop_path:
             # Don't collapse the root
             hx_attrs = ""
@@ -280,9 +280,6 @@ def sop_html(
 
         def iter_child_htmls():
             for child_label, child in sop.children.items():
-                assert not isinstance(
-                    child, int
-                ), "Should have unrolled any recursion by now"
                 child_path = replace(path, sop_path=(*path.sop_path, child_label))
                 filtered_relation = filter_relation(relation, (child_path,))
                 yield sop_html(

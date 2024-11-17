@@ -381,5 +381,5 @@ def max_de_bruijn_index_relative_to_current_node(sop: SumProductNode[T]) -> int:
 def empty_recursion(sop: SumProductNode[T]) -> bool:
     return (
         only_has_de_bruijn_indices(sop)
-        and max_de_bruijn_index_relative_to_current_node(sop) > 1
+        and max_de_bruijn_index_relative_to_current_node(sop) <= 0
     )

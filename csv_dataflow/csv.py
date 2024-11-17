@@ -1,20 +1,17 @@
 import csv
 from dataclasses import replace
 from frozendict import frozendict
-from itertools import chain, repeat
+from itertools import repeat
 from pathlib import Path
-from typing import Any, Iterator, TypeVar
+from typing import TypeVar
 
 from .cons import Cons, ConsList, at_index
 from .relation import BasicRelation, Between, ParallelRelation
 from .sop import (
     SumProductChild,
     SumProductNode,
-    SumProductPath,
     add_paths,
-    max_de_bruijn_index_relative_to_current_node,
-    merge_sops,
-    only_has_de_bruijn_indices,
+    empty_recursion,
     sop_from_type,
 )
 
@@ -27,7 +24,7 @@ def select_given_csv_paths(
     name_paths: tuple[tuple[str, ...], ...],
     immediate_name_paths: tuple[tuple[str, ...], ...] = (),
     prev_stack: ConsList[SumProductNode[T]] = None,
-) -> SumProductNode[T]:
+) -> SumProductNode[T] | None:
     """
     Will also include open de Bruijn indices as they could still
     be put in a context that matches
@@ -52,75 +49,45 @@ def select_given_csv_paths(
         path: immediate_name_paths_for(path) for path in sop.children
     }
 
-    # Apply this function to all children
-    filtered_children = {
-        path: filtered_child
-        for path, child in sop.children.items()
-        for filtered_child in (
-            (
-                (
-                    select_given_csv_paths(
-                        child if not isinstance(child, int) else at_index(stack, child),
-                        # No new matches in the mirror realm
-                        name_paths if not isinstance(child, int) else (),
-                        child_immediate_name_paths[path],
-                        stack,
-                    )
-                )
-                if not isinstance(child, int) or child_immediate_name_paths[path]
-                else child
-            ),
-        )
-    }
-
-    # Filter down to children that:
-    #   - Have real data in their (filtered) children, or
-    #   - Are selected by a path, or
-    #   - Have (or are) de Bruijn indices that remain open above
-    #     the current node's level
-    selected_children_with_data_or_open_de_bruijn_indices = {
-        path: child
-        for path, child in filtered_children.items()
-        if (
-            not isinstance(child, int)
-            and (
-                (
-                    child.children
-                    and (
-                        not only_has_de_bruijn_indices(child)
-                        or max_de_bruijn_index_relative_to_current_node(child) > 1
-                    )
-                )
-                or (not child.children and (path,) in name_paths)
-            )
-        )
-        or (isinstance(child, int) and child > 0)
-    }
-
-    return replace(
+    # The filtered children have either one or more given paths, or
+    # open de Bruijn indices, or both
+    # Children not containing any selected paths return None (again,
+    # unless they have open de Bruijn indices)
+    filtered_sop = replace(
         sop,
         children=frozendict[str, SumProductChild](
             {
-                **selected_children_with_data_or_open_de_bruijn_indices,
-                # de Bruijn indices directly referencing this node, only
-                # if this node has other children with actual data / open indices
-                **(
-                    {
-                        path: child
-                        for path, child in filtered_children.items()
-                        if (isinstance(child, int) and child == 0)
-                        or (
-                            not isinstance(child, int)
-                            and only_has_de_bruijn_indices(child)
-                            and max_de_bruijn_index_relative_to_current_node(child) == 1
+                path: filtered_child
+                for path, child in sop.children.items()
+                for filtered_child in (
+                    (
+                        (
+                            select_given_csv_paths(
+                                (
+                                    child
+                                    if not isinstance(child, int)
+                                    else at_index(stack, child)
+                                ),
+                                # No new matches in the mirror realm
+                                name_paths if not isinstance(child, int) else (),
+                                child_immediate_name_paths[path],
+                                stack,
+                            )
                         )
-                    }
-                    if len(selected_children_with_data_or_open_de_bruijn_indices) > 0
-                    else {}
-                ),
+                        if not isinstance(child, int)
+                        or child_immediate_name_paths[path]
+                        else child
+                    ),
+                )
+                if filtered_child is not None
             }
         ),
     )
+
+    if not filtered_sop.children or empty_recursion(filtered_sop):
+        return None
+
+    return filtered_sop
 
 
 class Source: ...
@@ -178,18 +145,18 @@ def parallel_relation_from_csv(
             source_value_paths_tuple = tuple(source_value_paths)
             target_value_paths_tuple = tuple(target_value_paths)
 
-            relations.append(
-                BasicRelation(
-                    select_given_csv_paths(
-                        add_paths(sop_s, source_value_paths_tuple),
-                        source_value_paths_tuple,
-                    ),
-                    select_given_csv_paths(
-                        add_paths(sop_t, target_value_paths_tuple),
-                        target_value_paths_tuple,
-                    ),
-                )
+            source = select_given_csv_paths(
+                add_paths(sop_s, source_value_paths_tuple),
+                source_value_paths_tuple,
             )
+            assert source is not None
+            target = select_given_csv_paths(
+                add_paths(sop_t, target_value_paths_tuple),
+                target_value_paths_tuple,
+            )
+            assert target is not None
+
+            relations.append(BasicRelation(source, target))
 
     return (
         add_paths(sop_s, tuple(all_source_value_paths)),
