@@ -10,7 +10,7 @@ from .relation import BasicRelation, Between, ParallelRelation
 from .sop import (
     SumProductChild,
     SumProductNode,
-    add_paths,
+    add_path_values,
     empty_recursion,
     sop_from_type,
 )
@@ -145,21 +145,31 @@ def parallel_relation_from_csv(
             source_value_paths_tuple = tuple(source_value_paths)
             target_value_paths_tuple = tuple(target_value_paths)
 
+            sop_s_with_values = add_path_values(sop_s, source_value_paths_tuple)
+            assert not isinstance(sop_s_with_values, int)
+            sop_t_with_values = add_path_values(sop_t, target_value_paths_tuple)
+            assert not isinstance(sop_t_with_values, int)
+
             source = select_given_csv_paths(
-                add_paths(sop_s, source_value_paths_tuple),
+                sop_s_with_values,
                 source_value_paths_tuple,
             )
             assert source is not None
             target = select_given_csv_paths(
-                add_paths(sop_t, target_value_paths_tuple),
+                sop_t_with_values,
                 target_value_paths_tuple,
             )
             assert target is not None
 
             relations.append(BasicRelation(source, target))
 
+    sop_s_with_all_values = add_path_values(sop_s, tuple(all_source_value_paths))
+    assert not isinstance(sop_s_with_all_values, int)
+    sop_t_with_all_values = add_path_values(sop_t, tuple(all_target_value_paths))
+    assert not isinstance(sop_t_with_all_values, int)
+
     return (
-        add_paths(sop_s, tuple(all_source_value_paths)),
-        add_paths(sop_t, tuple(all_target_value_paths)),
+        sop_s_with_all_values,
+        sop_t_with_all_values,
         ParallelRelation(tuple(zip(relations, repeat(Between[S, T]((), ()))))),
     )

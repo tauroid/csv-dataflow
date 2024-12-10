@@ -158,45 +158,41 @@ def iter_sop_paths(
                 yield path
 
 
-def add_paths(
-    node: SumProductNode[T],
-    paths: Iterable[SumProductPath[T]],
+def add_path_values(
+    node: SumProductNode[T] | DeBruijn,
+    paths: Collection[SumProductPath[T]],
     prev_stack: ConsList[SumProductNode[Any]] = None,
-) -> SumProductNode[T]:
-    paths_tuple = tuple(paths)
+    active_paths: Collection[SumProductPath[T]] = (),
+    recursing: bool = False,
+) -> SumProductNode[T] | DeBruijn:
+    """
+    Find the penultimate node of each path and add the final
+    value to it as a child
+    """
+    if isinstance(node, int):
+        if recursing:
+            return node
 
-    if not paths_tuple:
-        return node
+        node = at_index(prev_stack, node)
+        recursing = True
 
-    def paths_at(element: str) -> Iterator[SumProductPath[T]]:
-        for path in paths_tuple:
-            if path[0] == element and len(path) > 1:
-                yield path[1:]
+    paths = (*paths, *active_paths)
 
-    if node.children:
-        stack = Cons(node, prev_stack)
-        children_dict: dict[str, SumProductChild] = {}
-        for child_path, child in node.children.items():
-            if isinstance(child, int):
-                unrolled_child = at_index(stack, child)
-            else:
-                unrolled_child = child
+    values = tuple(path[0] for path in paths if len(path) == 1)
 
-            children_dict[child_path] = add_paths(
-                unrolled_child, paths_at(child_path), stack
-            )
-
-        children = frozendict[str, SumProductChild](children_dict)
-    else:
-        children = frozendict[str, SumProductChild](
-            {
-                child_path: add_paths(
-                    VOID,
-                    paths_at(child_path),
+    children = frozendict[str, SumProductChild](
+        {
+            **{value: UNIT for value in values},
+            **{
+                child_path: add_path_values(
+                    child, paths, Cons(node, prev_stack),
+                    tuple(path[1:] for path in paths if path[0] == child_path),
+                    recursing
                 )
-                for child_path in {path[0]: None for path in paths_tuple}.keys()
-            }
-        )
+                for child_path, child in node.children.items()
+            },
+        }
+    )
 
     return SumProductNode(
         node.sop,
@@ -302,9 +298,7 @@ def clip_sop(
     )
 
 
-def merge_sops(
-    *sops: SumProductNode[T, Data]
-) -> SumProductNode[T, Data]:
+def merge_sops(*sops: SumProductNode[T, Data]) -> SumProductNode[T, Data]:
     first, *rest = sops
 
     assert all(sop.sop == first.sop and sop.data == first.data for sop in rest)
@@ -348,6 +342,7 @@ def merge_sops(
             }
         ),
     )
+
 
 def only_has_de_bruijn_indices(sop: SumProductNode[T]) -> bool:
     if not sop.children:

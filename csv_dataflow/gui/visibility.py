@@ -15,17 +15,12 @@ def combine_same(a: T, b: T) -> T:
 
 
 def compute_visible_sop(
-    selected: SumProductNode[T, bool] | DeBruijn,
-    expanded: SumProductNode[T, bool] | DeBruijn,
+    selected: SumProductNode[T, bool],
+    expanded: SumProductNode[T, bool],
     parent_expanded: bool = True,
     selected_prev_stack: ConsList[SumProductNode[T, bool]] = None,
     expanded_prev_stack: ConsList[SumProductNode[T, bool]] = None,
 ) -> SumProductNode[T, bool] | None:
-    if isinstance(selected, DeBruijn):
-        selected = at_index(selected_prev_stack, selected)
-    if isinstance(expanded, DeBruijn):
-        expanded = at_index(expanded_prev_stack, expanded)
-
     visible_children: dict[str, SumProductChild[bool]] = {
         path: child
         for path in map(combine_same, selected.children, expanded.children)

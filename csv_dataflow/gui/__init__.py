@@ -10,6 +10,8 @@ from flask import Flask, g, Response, session
 
 from pprint import pprint
 
+from frozendict import frozendict
+
 from examples.ex1.types import A, B
 
 from ..csv import parallel_relation_from_csv
@@ -24,7 +26,7 @@ from ..relation import (
     iter_basic_relations,
     iter_relation_paths,
 )
-from ..sop import DeBruijn, SumProductNode, SumProductPath, map_node_data, sop_from_type
+from ..sop import DeBruijn, SumProductChild, SumProductNode, SumProductPath, map_node_data, sop_from_type
 
 from .visibility import compute_visible_sop
 
@@ -376,16 +378,13 @@ def root() -> str:
         # )
         typed_session["relation"] = pickle.dumps(relation)
 
-        source_selected = map_node_data(lambda _: False, source)
-        target_selected = map_node_data(lambda _: False, target)
+        source_selected = SumProductNode[A,bool](source.sop, frozendict[str, SumProductChild[bool]]({}), False)
+        target_selected = SumProductNode[B,bool](target.sop, frozendict[str, SumProductChild[bool]]({}), False)
         typed_session["source_selected"] = pickle.dumps(source_selected)
         typed_session["target_selected"] = pickle.dumps(target_selected)
 
-        source_expanded = map_node_data(lambda _: False, source)
-        target_expanded = map_node_data(lambda _: False, target)
-        # Expand top level
-        source_expanded = replace(source_expanded, data=True)
-        target_expanded = replace(target_expanded, data=True)
+        source_expanded = SumProductNode[A,bool](source.sop, frozendict[str, SumProductChild[bool]]({}), True)
+        target_expanded = SumProductNode[B,bool](target.sop, frozendict[str, SumProductChild[bool]]({}), True)
         typed_session["source_expanded"] = pickle.dumps(source_expanded)
         typed_session["target_expanded"] = pickle.dumps(target_expanded)
     else:
