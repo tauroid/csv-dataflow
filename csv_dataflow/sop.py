@@ -6,7 +6,6 @@ from typing import (
     Callable,
     Collection,
     Generic,
-    Iterable,
     Iterator,
     Literal,
     Mapping,
@@ -168,6 +167,9 @@ def add_path_values(
     """
     Find the penultimate node of each path and add the final
     value to it as a child
+
+    The paths don't have to be anchored at the root, any sequence
+    of branches that matches works
     """
     if isinstance(node, int):
         if recursing:
@@ -185,9 +187,11 @@ def add_path_values(
             **{value: UNIT for value in values},
             **{
                 child_path: add_path_values(
-                    child, paths, Cons(node, prev_stack),
+                    child,
+                    paths,
+                    Cons(node, prev_stack),
                     tuple(path[1:] for path in paths if path[0] == child_path),
-                    recursing
+                    recursing,
                 )
                 for child_path, child in node.children.items()
             },
@@ -202,45 +206,41 @@ def add_path_values(
 
 
 def select_from_paths(
-    node: SumProductNode[T, Data],
+    node: SumProductNode[T, Data] | DeBruijn,
     paths: Collection[SumProductPath[T]],
     prev_stack: ConsList[SumProductNode[Any, Data]] = None,
 ) -> SumProductNode[T, Data] | None:
+    """These paths have to be anchored at the root"""
     if not paths:
         return None
+
+    if isinstance(node, int):
+        node = at_index(prev_stack, node)
 
     if () in paths:
         return node
 
-    stack = Cons(node, prev_stack)
+    children = frozendict[str, SumProductChild[Data]](
+        {
+            child_path: filtered_child
+            for child_path, child in node.children.items()
+            for filtered_child in (
+                select_from_paths(
+                    child,
+                    tuple(path[1:] for path in paths if path[0] == child_path),
+                    Cons(node, prev_stack),
+                ),
+            )
+            if filtered_child is not None
+        }
+    )
 
-    children_dict: dict[str, SumProductChild[Data]] = {}
-    for child_path in {path[0]: None for path in paths}.keys():
-        child = node.children[child_path]
-        if isinstance(child, int):
-            unrolled_child = at_index(stack, child)
-        else:
-            unrolled_child = child
-
-        filtered_child = select_from_paths(
-            unrolled_child,
-            {
-                path[1:]: None
-                for path in paths
-                if path[0] == child_path and len(path) > 1
-            }.keys(),
-            stack,
-        )
-
-        if filtered_child:
-            children_dict[child_path] = filtered_child
-
-    if not children_dict:
+    if not children:
         return None
 
     return SumProductNode(
         node.sop,
-        frozendict[str, SumProductNode[T, Data]](children_dict),
+        children,
         node.data,
     )
 

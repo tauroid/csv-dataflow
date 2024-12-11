@@ -256,7 +256,9 @@ def highlight_related_on_hover(relation: Relation[S, T]) -> str:
 
 
 def sop_html(
-    sop: SumProductNode[Any, bool] | DeBruijn, relation: Relation[S, T], path: RelationPath[S, T]
+    sop: SumProductNode[Any, bool] | DeBruijn,
+    relation: Relation[S, T],
+    path: RelationPath[S, T],
 ) -> str:
     expand_path = f"/expanded/{path.to_str()}"
     path_id = f"{path.to_str(":")}"
@@ -360,15 +362,23 @@ def html(
     )
 
 
+from examples.ex3.precompiled_list import sop, relation
+
+
 @app.route("/")
 def root() -> str:
     if not typed_session.get("relation"):
         # relation_1 = parallel_relation_from_csv(
         #     A, B, Path("examples/ex1/a_name_to_b_code.csv")
         # )
-        source, target, relation = parallel_relation_from_csv(
-            A, B, Path("examples/ex1/a_name_to_b_option.csv")
-        )
+        # source, target, relation = parallel_relation_from_csv(
+        #     A, B, Path("examples/ex1/a_name_to_b_option.csv")
+        # )
+        global sop
+        source = sop
+        target = sop
+        global relation
+        relation = relation
         # relation = ParallelRelation(
         #     relation_1.source,
         #     relation_1.target,
@@ -427,6 +437,13 @@ def set_session_point_path_expanded(
     expanded_key = f"{point.lower()}_expanded"
     expanded: SumProductNode[Any, bool] = pickle.loads(typed_session[expanded_key])
     expanded = expanded.replace_data_at(path, yes)
+    if yes:
+        # Expand recursion
+        for child in expanded.at(path).children:
+            child_path = (*path, child)
+            expanded = expanded.replace_at(
+                child_path, map_node_data(lambda _: False, expanded.at(child_path))
+            )
     typed_session[expanded_key] = pickle.dumps(expanded)
     match point:
         case "Source":
