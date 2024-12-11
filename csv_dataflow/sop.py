@@ -289,7 +289,7 @@ def clip_sop(
             unrolled_node_child = node_child
 
         if unrolled_node_child:
-            children_dict[path] = clip_sop(unrolled_node_child, clip_child)
+            children_dict[path] = clip_sop(unrolled_node_child, clip_child, stack)
 
     return SumProductNode(
         node.sop,

@@ -17,4 +17,4 @@ def at_index(l: ConsList[T], i: int) -> T:
         return l.head
     else:
         assert i > 0
-        return at_index(l, i-1)
+        return at_index(l.tail, i-1)
