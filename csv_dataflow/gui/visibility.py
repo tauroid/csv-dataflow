@@ -2,8 +2,7 @@ from typing import TypeVar
 
 from frozendict import frozendict
 
-from ..cons import Cons, ConsList, at_index
-from ..sop import DeBruijn, SumProductChild, SumProductNode
+from ..sop import DeBruijn, SumOrProduct, SumProductChild, SumProductNode
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -15,31 +14,46 @@ def combine_same(a: T, b: T) -> T:
 
 
 def compute_visible_sop(
-    selected: SumProductNode[T, bool],
-    expanded: SumProductNode[T, bool],
+    selected: SumProductNode[T, bool] | None,
+    expanded: SumProductNode[T, bool] | None,
     parent_expanded: bool = True,
-    selected_prev_stack: ConsList[SumProductNode[T, bool]] = None,
-    expanded_prev_stack: ConsList[SumProductNode[T, bool]] = None,
 ) -> SumProductNode[T, bool] | None:
+    sop: SumOrProduct
+    if selected is None and expanded is None:
+        return None
+    elif selected and expanded:
+        child_paths = map(combine_same, selected.children, expanded.children)
+        sop = combine_same(selected.sop, expanded.sop)
+    elif selected:
+        child_paths = selected.children.keys()
+        sop = selected.sop
+    elif expanded:
+        child_paths = expanded.children.keys()
+        sop = expanded.sop
+    else:
+        # Shouldn't happen
+        raise NotImplementedError
+
+    def int_to_none(v: int | SumProductNode[T, bool]) -> SumProductNode[T, bool] | None:
+        return None if isinstance(v, int) else v
+
     visible_children: dict[str, SumProductChild[bool]] = {
         path: child
-        for path in map(combine_same, selected.children, expanded.children)
+        for path in child_paths
         for child in (
             compute_visible_sop(
-                selected.children[path],
-                expanded.children[path],
-                expanded.data,
-                Cons(selected, selected_prev_stack),
-                Cons(expanded, expanded_prev_stack),
+                int_to_none(selected.children[path]) if selected else None,
+                int_to_none(expanded.children[path]) if expanded else None,
+                expanded.data if expanded else False,
             ),
         )
         if child is not None
     }
 
     node = SumProductNode[T, bool](
-        combine_same(selected.sop, expanded.sop),
+        sop,
         frozendict[str, SumProductChild[bool]](visible_children),
-        selected.data
+        (selected.data if selected else False)
         or any(
             isinstance(child, SumProductNode) and child.data
             for child in visible_children.values()
