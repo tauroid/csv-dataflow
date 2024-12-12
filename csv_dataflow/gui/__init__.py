@@ -311,6 +311,9 @@ def arrow_div(basic_relation: BasicRelation[S, T]) -> str:
     """
 
 
+# FIXME time for this to be recursive
+# iter_basic_relations doesn't play well with Between
+# (unit BasicRelations look the same but have different targets)
 def arrows_html(visible: Relation[S, T]) -> str:
     return f"""
         <div class="arrows">
@@ -426,6 +429,7 @@ def recalculate_session_visible_relation(
     typed_session["source_visible"] = pickle.dumps(source_visible)
     typed_session["target_visible"] = pickle.dumps(target_visible)
     visible_relation = clip_relation(relation, source_visible, target_visible)
+    print(visible_relation)
     typed_session["visible_relation"] = pickle.dumps(visible_relation)
     return source_visible, target_visible, visible_relation
 

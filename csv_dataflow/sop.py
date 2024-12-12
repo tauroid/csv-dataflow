@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass, fields, is_dataclass, replace
 from itertools import chain
 import types
@@ -53,8 +54,8 @@ class SumProductNode(Generic[T, Data]):
     def at(
         self,
         path: SumProductPath[T],
-        prev_stack: "ConsList[SumProductNode[Any,Data]]" = None,
-    ) -> "SumProductNode[Any,Data]":
+        prev_stack: ConsList[SumProductNode[Any, Data]] = None,
+    ) -> SumProductNode[Any, Data]:
         if not path:
             return self
 
@@ -71,9 +72,9 @@ class SumProductNode(Generic[T, Data]):
     def replace_at(
         self,
         path: SumProductPath[T],
-        node: "SumProductNode[Any,Data]",
-        prev_stack: "ConsList[SumProductNode[Any,Data]]" = None,
-    ) -> "SumProductNode[T, Data]":
+        node: SumProductNode[Any, Data],
+        prev_stack: ConsList[SumProductNode[Any, Data]] = None,
+    ) -> SumProductNode[T, Data]:
         assert path
         if len(path) == 1:
             return replace(self, children={**self.children, path[0]: node})
@@ -98,8 +99,39 @@ class SumProductNode(Generic[T, Data]):
 
     def replace_data_at(
         self, path: SumProductPath[T], data: Data
-    ) -> "SumProductNode[T, Data]":
+    ) -> SumProductNode[T, Data]:
         return self.replace_at(path, replace(self.at(path), data=data))
+
+    def clip_path(
+        self,
+        path: SumProductPath[T],
+        path_prefix: SumProductPath[T] = (),
+        prev_stack: ConsList[SumProductNode[Any, Data]] = None,
+    ) -> SumProductPath[T]:
+        if not path:
+            return path_prefix
+
+        child_path, path_tail = path[0], path[1:]
+
+        child = self.children.get(child_path)
+
+        if not child:
+            if self.children:
+                raise Exception(
+                    "Will only clip a path if an empty node is found"
+                    " along it, not if there are children but the"
+                    " next one on the path isn't found"
+                )
+            return path_prefix
+
+        stack = Cons(self, prev_stack)
+
+        child_path_prefix = (*path_prefix, child_path)
+
+        if isinstance(child, int):
+            return at_index(stack, child).clip_path(path_tail, child_path_prefix, stack)
+        else:
+            return child.clip_path(path_tail, child_path_prefix, stack)
 
 
 UNIT = SumProductNode[Any]("*", frozendict[str, SumProductChild]({}))

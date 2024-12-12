@@ -89,6 +89,14 @@ class Between(Generic[S, T]):
     source: SumProductPath[S]
     target: SumProductPath[T]
 
+    def subtract_from(self, path: RelationPath[S, T]) -> RelationPath[S, T] | None:
+        prefix = self.source if path.point == "Source" else self.target
+        prefix_len = len(prefix)
+        if path.sop_path[:prefix_len] == prefix:
+            return replace(path, sop_path=path.sop_path[prefix_len:])
+        else:
+            return None
+
 
 @dataclass(frozen=True)
 class ParallelRelation(Generic[S, T]):
@@ -115,19 +123,27 @@ class SeriesRelation(Generic[S, T]):
 #       Then recursion and partitions
 
 
-def iter_relation_paths(relation: Relation[S, T]) -> Iterator[RelationPath[S, T]]:
+def iter_relation_paths(
+    relation: Relation[S, T],
+    source_prefix: SumProductPath[S] = (),
+    target_prefix: SumProductPath[T] = (),
+) -> Iterator[RelationPath[S, T]]:
     match relation:
         case BasicRelation(source=source, target=target):
             for path in iter_sop_paths(source):
-                yield RelationPath("Source", path)
+                yield RelationPath("Source", (*source_prefix, *path))
             for path in iter_sop_paths(target):
-                yield RelationPath("Target", path)
+                yield RelationPath("Target", (*target_prefix, *path))
         case ParallelRelation(children=children):
-            for child, _ in children:
+            for child, between in children:
                 assert not isinstance(
                     child, int
                 ), "Flat iterating over a recursive relation is probably a mistake"
-                for path in iter_relation_paths(child):
+                for path in iter_relation_paths(
+                    child,
+                    (*source_prefix, *between.source),
+                    (*target_prefix, *between.target),
+                ):
                     yield path
         case SeriesRelation():
             raise NotImplementedError
@@ -187,12 +203,44 @@ def empty_recursion(relation: Relation[S, T]) -> bool:
     )
 
 
+def filter_parallel_relation_child(
+    child: tuple[Relation[S, T] | DeBruijn, Between[S, T]],
+    filter_paths: Collection[RelationPath[S, T]],
+) -> tuple[Relation[S, T] | DeBruijn, Between[S, T]] | None:
+    relation, between = child
+    for filter_path in filter_paths:
+        between_path = (
+            between.source if filter_path.point == "Source" else between.target
+        )
+        if between_path[: len(filter_path.sop_path)] == filter_path.sop_path:
+            # Then it's entirely underneath the filter path so good
+            return child
+
+    if isinstance(relation, int):
+        return relation, between
+
+    filtered_relation = filter_relation(
+        relation,
+        tuple(
+            relative_filter_path
+            for filter_path in filter_paths
+            for relative_filter_path in (between.subtract_from(filter_path),)
+            if relative_filter_path is not None
+        ),
+    )
+
+    if filtered_relation is None:
+        return None
+
+    return filtered_relation, between
+
+
 def filter_relation(
     relation: Relation[S, T], filter_paths: Collection[RelationPath[S, T]]
 ) -> Relation[S, T] | None:
     """
     Reduces to BasicRelations connecting something in the
-    subtree of at least one of `paths`
+    subtree of at least one of the input paths
 
     TODO not using Between properly yet
     """
@@ -224,16 +272,14 @@ def filter_relation(
             filtered_relation = replace(
                 relation,
                 children=tuple(
-                    (filtered_child, between)
-                    for child, between in children
-                    for filtered_child in (
-                        (
-                            filter_relation(child, filter_paths)
-                            if not isinstance(child, int)
-                            else child
-                        ),
-                    )
-                    if filtered_child is not None
+                    {
+                        filtered_child: None
+                        for child in children
+                        for filtered_child in (
+                            filter_parallel_relation_child(child, filter_paths),
+                        )
+                        if filtered_child is not None
+                    }.keys()
                 ),
             )
 
@@ -268,13 +314,23 @@ def clip_relation(
                     {
                         (
                             (
-                                clip_relation(child, source_clip, target_clip)
+                                clip_relation(
+                                    child,
+                                    source_clip.at(clipped_between.source),
+                                    target_clip.at(clipped_between.target),
+                                )
                                 if not isinstance(child, int)
                                 else child
                             ),
-                            between,
+                            clipped_between,
                         ): None
                         for child, between in children
+                        for clipped_between in (
+                            Between[S, T](
+                                source_clip.clip_path(between.source),
+                                target_clip.clip_path(between.target),
+                            ),
+                        )
                     }.keys()
                 )
             )
