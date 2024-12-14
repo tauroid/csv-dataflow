@@ -5,7 +5,7 @@ from itertools import accumulate, chain, islice
 from pathlib import Path
 import pickle
 import time
-from typing import Any, Literal, MutableMapping, TypeVar, cast
+from typing import Any, Literal, MutableMapping, TypeIs, TypeVar, cast
 from flask import Flask, g, Response, session
 
 from pprint import pprint
@@ -15,9 +15,11 @@ from examples.ex1.types import A, B
 from ..csv import parallel_relation_from_csv
 from ..relation import (
     BasicRelation,
+    ParallelChildIndex,
     ParallelRelation,
     Relation,
     RelationPath,
+    RelationPathElement,
     SeriesRelation,
     clip_relation,
     filter_relation,
@@ -214,18 +216,26 @@ body > .sum {
     font-size: 30pt;
     gap: 20px;
 }
-.arrows > div {
+.arrows div {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding-bottom: 6px;
+    gap: 6px;
+}
+.arrows > div div:has(div:not(:only-child)) {
+    border: 2px solid black;
+    padding: 6px;
+    border-radius: 10px;
+}
+.arrows div:not(:has(div)) {
     height: 35px;
     width: 75px;
-    border-radius: 5px;
     overflow: hidden;
+    border-radius: 5px;
+    padding-bottom: 2px;
 }
-.arrows .highlighted {
+.arrows > div div:not(:has(div)):hover {
     background-color: #dfb !important;
     border: 2px solid black;
 }
@@ -235,13 +245,27 @@ body > .sum {
 def basic_relation_id(relation: BasicRelation[S, T]) -> str:
     return f"rel-{hash(relation)}"
 
+# FIXME using relation and filtered_relation, compute the
+# smallest set of relation ids that unambiguously show which
+# relations are in filtered_relation
+#
+# so if all children recursively of some relation in `relation`
+# are also in `filtered_relation`, just give the id of that
+# top relation instead of all the children
+#
+# then highlighting that top relation will be sufficient
 
-def highlight_related_on_hover(relation: Relation[S, T]) -> str:
+
+def highlight_related_on_hover(
+    relation: Relation[S, T],
+    source_prefix: SumProductPath[S] = (),
+    target_prefix: SumProductPath[T] = (),
+) -> str:
     relation_paths = filter(
         lambda p: len(p) > 1,
         chain.from_iterable(
             accumulate(map(lambda x: (x,), path.flat()))
-            for path in iter_relation_paths(relation)
+            for path in iter_relation_paths(relation, source_prefix, target_prefix)
         ),
     )
     related_ids = (f"#{":".join(map(str, path))}" for path in set(relation_paths))
@@ -249,7 +273,7 @@ def highlight_related_on_hover(relation: Relation[S, T]) -> str:
         map(lambda r: f"#{basic_relation_id(r)}", iter_basic_relations(relation))
     )
     return (
-        f"on mouseenter toggle .highlighted on [{",".join(chain(related_ids, basic_relation_ids))}] until mouseleave"
+        f"on mouseover halt the event's bubbling toggle .highlighted on [{",".join(chain(related_ids, basic_relation_ids))}] until mouseout"
         if related_ids
         else ""
     )
@@ -302,26 +326,54 @@ def sop_html(
         return f"""<div id="{path_id}" _="{hover}" hx-put="{expand_path}" hx-swap="outerHTML">{label}</div>"""
 
 
-def arrow_div(basic_relation: BasicRelation[S, T]) -> str:
-    return f"""
-       <div id="{basic_relation_id(basic_relation)}"
-             _="{highlight_related_on_hover(basic_relation)}">
-         ⟶
-       </div>
+def assert_isinstance(value: Any, typ: type[T], yes: bool = True) -> TypeIs[T]:
     """
+    Make `yes` false if you want to assert it's not an instance
+    then return False
+    """
+    is_instance = isinstance(value, typ)
+    assert is_instance == yes
+    return is_instance
 
 
-# FIXME time for this to be recursive
-# iter_basic_relations doesn't play well with Between
-# (unit BasicRelations look the same but have different targets)
+def arrows_div(
+    relation: Relation[S, T],
+    relation_prefix: tuple[RelationPathElement, ...] = (),
+    source_prefix: SumProductPath[S] = (),
+    target_prefix: SumProductPath[T] = (),
+) -> str:
+    relation_id = f".rel:{":".join(map(str, relation_prefix))}"
+    match relation:
+        case ParallelRelation(children):
+            inner_arrows = "".join(
+                arrows_div(
+                    child,
+                    (*relation_prefix, ParallelChildIndex(i)),
+                    (*source_prefix, *between.source),
+                    (*target_prefix, *between.target),
+                )
+                for i, (child, between) in enumerate(children)
+                # Shouldn't happen as should be expanded
+                if not assert_isinstance(child, int, False)
+            )
+            return f"""
+                <div id="{relation_id}" _="{highlight_related_on_hover(relation, source_prefix, target_prefix)}">
+                {inner_arrows}
+                </div>
+            """
+        case BasicRelation():
+            return f"""
+                <div id="{relation_id}"
+                        _="{highlight_related_on_hover(relation, source_prefix, target_prefix)}">
+                    ⟶
+                </div>
+            """
+        case _:
+            raise NotImplementedError
+
+
 def arrows_html(visible: Relation[S, T]) -> str:
-    return f"""
-        <div class="arrows">
-            {"".join(arrow_div(basic_relation) for basic_relation in dict(
-                (r,None) for r in iter_basic_relations(visible)
-             ))}
-        </div>
-    """
+    return f'<div class="arrows">{arrows_div(visible)}</div>'
 
 
 def relation_html(
