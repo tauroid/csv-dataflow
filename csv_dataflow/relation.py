@@ -294,13 +294,6 @@ def filter_relation(
 A = TypeVar("A")
 B = TypeVar("B")
 
-# FIXME this is so broken, just tell the BasicRelation its
-# source and target prefixes, keep source_clip and target_clip
-# based at the root, keep using clip_sop if the prefix
-# is within the clip, or just use clip.at(clip.clip_path(prefix))
-# if it's not
-
-
 def clip_relation(
     relation: Relation[S, T],
     source_clip: SumProductNode[S, Any],
