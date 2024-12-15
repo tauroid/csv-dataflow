@@ -2,6 +2,7 @@ from dataclasses import replace
 from functools import partial
 import inspect
 from itertools import accumulate, chain, islice, repeat
+from pathlib import Path
 import pickle
 import time
 from typing import Any, Literal, MutableMapping, TypeIs, TypeVar, cast
@@ -370,12 +371,13 @@ def highlight_related_on_hover(
 
 
 def sop_html(
+    page_name: str,
     sop: SumProductNode[Any, bool] | DeBruijn,
     path: RelationPath[S, T],
     filtered_relation: Relation[S, T],
     full_relation: Relation[S, T] | None = None,
 ) -> str:
-    expand_path = f"/expanded/{path.to_str()}"
+    expand_path = f"{page_name}/expanded/{path.to_str()}"
     path_id = f"{path.to_str(":")}"
 
     hover = (
@@ -406,6 +408,7 @@ def sop_html(
                     filtered_relation, (child_path,)
                 )
                 yield sop_html(
+                    page_name,
                     child,
                     child_path,
                     filtered_relation_for_child
@@ -466,6 +469,7 @@ def arrows_html(visible: Relation[S, T]) -> str:
 
 
 def relation_html(
+    page_name: str,
     source: SumProductNode[S, bool],
     target: SumProductNode[T, bool],
     relation: Relation[S, T],
@@ -473,8 +477,12 @@ def relation_html(
     match relation:
         case BasicRelation() | ParallelRelation():
             sop_htmls = (
-                sop_html(source, RelationPath("Source", ()), relation, relation),
-                sop_html(target, RelationPath("Target", ()), relation, relation),
+                sop_html(
+                    page_name, source, RelationPath("Source", ()), relation, relation
+                ),
+                sop_html(
+                    page_name, target, RelationPath("Target", ()), relation, relation
+                ),
             )
             arrows = arrows_html(relation)
         case SeriesRelation():
@@ -486,12 +494,12 @@ def relation_html(
 
 
 def html(
+    page_name: str,
     source: SumProductNode[S, bool],
     target: SumProductNode[T, bool],
     relation: Relation[S, T],
 ) -> str:
     """Args are only the parts to actually display on the page"""
-    print(relation)
     return inspect.cleandoc(
         f"""
         <!doctype html>
@@ -501,63 +509,122 @@ def html(
                 <script src="https://unpkg.com/htmx.org@2.0.3"></script>
                 <script src="https://unpkg.com/hyperscript.org@0.9.13"></script>
             </head>
-            <body>{relation_html(source, target, relation)}</body>
+            <body>{relation_html(page_name, source, target, relation)}</body>
         </html>
     """
     )
 
 
-from examples.ex3.precompiled_list import sop, relation
-
-
-@app.route("/")
-def root() -> str:
-    if not typed_session.get("relation"):
-        # relation_1 = parallel_relation_from_csv(
-        #     A, B, Path("examples/ex1/a_name_to_b_code.csv")
-        # )
-        # source, target, relation = parallel_relation_from_csv(
-        #     A, B, Path("examples/ex1/a_name_to_b_option.csv")
-        # )
-        global sop
-        source = sop
-        target = sop
-        global relation
-        relation = relation
-        # relation = ParallelRelation(
-        #     relation_1.source,
-        #     relation_1.target,
-        #     (relation_1, relation_2)
-        # )
-        typed_session["relation"] = pickle.dumps(relation)
+def relation_page(
+    name: str,
+    source: SumProductNode[S],
+    target: SumProductNode[T],
+    relation: Relation[S, T],
+) -> str:
+    if not typed_session.get(f"{name}_relation"):
+        typed_session[f"{name}_relation"] = pickle.dumps(relation)
 
         source_selected = map_node_data(lambda _: False, source)
         target_selected = map_node_data(lambda _: False, target)
-        typed_session["source_selected"] = pickle.dumps(source_selected)
-        typed_session["target_selected"] = pickle.dumps(target_selected)
+        typed_session[f"{name}_source_selected"] = pickle.dumps(source_selected)
+        typed_session[f"{name}_target_selected"] = pickle.dumps(target_selected)
 
         source_expanded = map_node_data(lambda _: False, source)
         target_expanded = map_node_data(lambda _: False, target)
         # Expand top level
         source_expanded = replace(source_expanded, data=True)
         target_expanded = replace(target_expanded, data=True)
-        typed_session["source_expanded"] = pickle.dumps(source_expanded)
-        typed_session["target_expanded"] = pickle.dumps(target_expanded)
+        typed_session[f"{name}_source_expanded"] = pickle.dumps(source_expanded)
+        typed_session[f"{name}_target_expanded"] = pickle.dumps(target_expanded)
     else:
-        relation = pickle.loads(typed_session["relation"])
-        source_selected = pickle.loads(typed_session["source_selected"])
-        target_selected = pickle.loads(typed_session["target_selected"])
-        source_expanded = pickle.loads(typed_session["source_expanded"])
-        target_expanded = pickle.loads(typed_session["target_expanded"])
+        relation = pickle.loads(typed_session[f"{name}_relation"])
+        source_selected = pickle.loads(typed_session[f"{name}_source_selected"])
+        target_selected = pickle.loads(typed_session[f"{name}_target_selected"])
+        source_expanded = pickle.loads(typed_session[f"{name}_source_expanded"])
+        target_expanded = pickle.loads(typed_session[f"{name}_target_expanded"])
 
     return html(
+        name,
         *recalculate_session_visible_relation(
-            relation, source_selected, target_selected, source_expanded, target_expanded
-        )
+            name,
+            relation,
+            source_selected,
+            target_selected,
+            source_expanded,
+            target_expanded,
+        ),
     )
 
 
+@app.route("/")
+def root() -> str:
+    # relation_1 = parallel_relation_from_csv(
+    #     A, B, Path("examples/ex1/a_name_to_b_code.csv")
+    # )
+    # source, target, relation = parallel_relation_from_csv(
+    #     A, B, Path("examples/ex1/a_name_to_b_option.csv")
+    # )
+    # relation = ParallelRelation(
+    #     relation_1.source,
+    #     relation_1.target,
+    #     (relation_1, relation_2)
+    # )
+
+    return """
+    <!doctype html>
+    <html>
+        <head>
+            <style>
+                body {
+                    margin: 0;
+                    height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                page-links {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 20px;
+                }
+            </style>
+        </head>
+        <body>
+            <page-links>
+                <page-link><a href="/ex1-name-to-code">Example 1: Name to Code</a></page-link>
+                <page-link><a href="/ex1-name-to-option">Example 1: Name to Option</a></page-link>
+                <page-link><a href="/ex3">Example 3</a></page-link>
+            </page-links>
+        </body>
+    </html>
+    """
+
+
+@app.route("/ex1-name-to-code")
+def example_1_name_to_code() -> str:
+    return relation_page(
+        "ex1-name-to-code",
+        *parallel_relation_from_csv(A, B, Path("examples/ex1/a_name_to_b_code.csv")),
+    )
+
+
+@app.route("/ex1-name-to-option")
+def example_1_name_to_option() -> str:
+    return relation_page(
+        "ex1-name-to-option",
+        *parallel_relation_from_csv(A, B, Path("examples/ex1/a_name_to_b_option.csv")),
+    )
+
+
+@app.route("/ex3")
+def example_3() -> str:
+    from examples.ex3.precompiled_list import sop, relation
+
+    return relation_page("ex3", sop, sop, relation)
+
+
 def recalculate_session_visible_relation(
+    name: str,
     relation: Relation[S, T],
     source_selected: SumProductNode[S, bool],
     target_selected: SumProductNode[T, bool],
@@ -568,19 +635,21 @@ def recalculate_session_visible_relation(
     target_visible = compute_visible_sop(target_selected, target_expanded)
     assert source_visible
     assert target_visible
-    typed_session["source_visible"] = pickle.dumps(source_visible)
-    typed_session["target_visible"] = pickle.dumps(target_visible)
+    typed_session[f"{name}_source_visible"] = pickle.dumps(source_visible)
+    typed_session[f"{name}_target_visible"] = pickle.dumps(target_visible)
     visible_relation = clip_relation(relation, source_visible, target_visible)
-    print(visible_relation)
-    typed_session["visible_relation"] = pickle.dumps(visible_relation)
+    typed_session[f"{name}_visible_relation"] = pickle.dumps(visible_relation)
     return source_visible, target_visible, visible_relation
 
 
 def set_session_point_path_expanded(
-    point: Literal["Source", "Target"], path: SumProductPath[Any], yes: bool = True
+    name: str,
+    point: Literal["Source", "Target"],
+    path: SumProductPath[Any],
+    yes: bool = True,
 ) -> tuple[SumProductNode[Any, bool], Relation[Any, Any]]:
     """Returns new visible sop and relation"""
-    expanded_key = f"{point.lower()}_expanded"
+    expanded_key = f"{name}_{point.lower()}_expanded"
     expanded: SumProductNode[Any, bool] = pickle.loads(typed_session[expanded_key])
     expanded = expanded.replace_data_at(path, yes)
     if yes:
@@ -595,20 +664,22 @@ def set_session_point_path_expanded(
         case "Source":
             recalculate = partial(
                 recalculate_session_visible_relation,
+                name,
                 source_expanded=expanded,
-                target_expanded=pickle.loads(typed_session["target_expanded"]),
+                target_expanded=pickle.loads(typed_session[f"{name}_target_expanded"]),
             )
         case "Target":
             recalculate = partial(
                 recalculate_session_visible_relation,
-                source_expanded=pickle.loads(typed_session["source_expanded"]),
+                name,
+                source_expanded=pickle.loads(typed_session[f"{name}_source_expanded"]),
                 target_expanded=expanded,
             )
 
     s, t, r = recalculate(
-        pickle.loads(typed_session["relation"]),
-        pickle.loads(typed_session["source_selected"]),
-        pickle.loads(typed_session["target_selected"]),
+        pickle.loads(typed_session[f"{name}_relation"]),
+        pickle.loads(typed_session[f"{name}_source_selected"]),
+        pickle.loads(typed_session[f"{name}_target_selected"]),
     )
 
     match point:
@@ -619,22 +690,24 @@ def set_session_point_path_expanded(
 
 
 def set_session_path_expanded(
-    path: RelationPath[Any, Any], yes: bool = True
+    name: str, path: RelationPath[Any, Any], yes: bool = True
 ) -> tuple[SumProductNode[Any, bool], Relation[Any, Any]]:
-    return set_session_point_path_expanded(path.point, path.sop_path, yes)
+    return set_session_point_path_expanded(name, path.point, path.sop_path, yes)
 
 
-@app.route("/expanded/<path:str_path>", methods=["PUT"])
-def expand(str_path: str) -> str:
+@app.route("/<page_name>/expanded/<path:str_path>", methods=["PUT"])
+def expand(page_name: str, str_path: str) -> str:
     path = RelationPath[A, B].from_str(str_path)
-    sop, relation = set_session_path_expanded(path)
+    sop, relation = set_session_path_expanded(page_name, path)
 
-    return sop_html(sop, path, relation)
+    print(page_name)
+
+    return sop_html(page_name, sop, path, relation)
 
 
-@app.route("/expanded/<path:str_path>", methods=["DELETE"])
-def collapse(str_path: str) -> str:
+@app.route("/<page_name>/expanded/<path:str_path>", methods=["DELETE"])
+def collapse(page_name: str, str_path: str) -> str:
     path = RelationPath[A, B].from_str(str_path)
-    sop, relation = set_session_path_expanded(path, False)
+    sop, relation = set_session_path_expanded(page_name, path, False)
 
-    return sop_html(sop, path, relation)
+    return sop_html(page_name, sop, path, relation)

@@ -275,13 +275,11 @@ def filter_relation(
             filtered_relation = replace(
                 relation,
                 children=tuple(
-                    {
-                        filtered_child: None
-                        for child in children
-                        for filtered_child in (
-                            filter_parallel_relation_child(child, filter_paths),
-                        )
-                    }.keys()
+                    filtered_child
+                    for child in children
+                    for filtered_child in (
+                        filter_parallel_relation_child(child, filter_paths),
+                    )
                 ),
             )
 
@@ -293,6 +291,7 @@ def filter_relation(
 
 A = TypeVar("A")
 B = TypeVar("B")
+
 
 def clip_relation(
     relation: Relation[S, T],
@@ -342,8 +341,8 @@ def clip_relation(
                 for between_target in ((*target_prefix, *between.target),)
                 for clipped_between in (
                     Between[S, T](
-                        source_clip.clip_path(between_source)[len(source_prefix):],
-                        target_clip.clip_path(between_target)[len(target_prefix):],
+                        source_clip.clip_path(between_source)[len(source_prefix) :],
+                        target_clip.clip_path(between_target)[len(target_prefix) :],
                     ),
                 )
             )
