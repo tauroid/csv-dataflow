@@ -78,10 +78,14 @@ class BasicRelation(Generic[S, T]):
     This is complicated somewhat on purpose, because then I don't need to
     reprocess wacked out CSVs into something sensible, and also can give
     them meaning (even if that meaning doesn't turn out to be a function).
+
+    Allowing `source` and `target` to be None mainly because
+    I don't want to make a separate FilteredXRelation set of
+    classes
     """
 
-    source: SumProductNode[S]
-    target: SumProductNode[T]
+    source: SumProductNode[S] | None
+    target: SumProductNode[T] | None
 
 
 @dataclass(frozen=True)
@@ -130,10 +134,12 @@ def iter_relation_paths(
 ) -> Iterator[RelationPath[S, T]]:
     match relation:
         case BasicRelation(source=source, target=target):
-            for path in iter_sop_paths(source):
-                yield RelationPath("Source", (*source_prefix, *path))
-            for path in iter_sop_paths(target):
-                yield RelationPath("Target", (*target_prefix, *path))
+            if source is not None:
+                for path in iter_sop_paths(source):
+                    yield RelationPath("Source", (*source_prefix, *path))
+            if target is not None:
+                for path in iter_sop_paths(target):
+                    yield RelationPath("Target", (*target_prefix, *path))
         case ParallelRelation(children=children):
             for child, between in children:
                 assert not isinstance(
@@ -206,7 +212,7 @@ def empty_recursion(relation: Relation[S, T]) -> bool:
 def filter_parallel_relation_child(
     child: tuple[Relation[S, T] | DeBruijn, Between[S, T]],
     filter_paths: Collection[RelationPath[S, T]],
-) -> tuple[Relation[S, T] | DeBruijn, Between[S, T]] | None:
+) -> tuple[Relation[S, T] | DeBruijn, Between[S, T]]:
     relation, between = child
     for filter_path in filter_paths:
         between_path = (
@@ -229,15 +235,12 @@ def filter_parallel_relation_child(
         ),
     )
 
-    if filtered_relation is None:
-        return None
-
     return filtered_relation, between
 
 
 def filter_relation(
     relation: Relation[S, T], filter_paths: Collection[RelationPath[S, T]]
-) -> Relation[S, T] | None:
+) -> Relation[S, T]:
     """
     Reduces to BasicRelations connecting something in the
     subtree of at least one of the input paths
@@ -253,7 +256,7 @@ def filter_relation(
                 )
             )
 
-            if select_from_paths(relation.source, source_paths):
+            if relation.source and select_from_paths(relation.source, source_paths):
                 return relation
 
             target_paths = tuple(
@@ -263,10 +266,10 @@ def filter_relation(
                 )
             )
 
-            if select_from_paths(relation.target, target_paths):
+            if relation.target and select_from_paths(relation.target, target_paths):
                 return relation
 
-            return None
+            return BasicRelation[S, T](None, None)
 
         case ParallelRelation(children=children):
             filtered_relation = replace(
@@ -278,13 +281,9 @@ def filter_relation(
                         for filtered_child in (
                             filter_parallel_relation_child(child, filter_paths),
                         )
-                        if filtered_child is not None
                     }.keys()
                 ),
             )
-
-            if not filtered_relation.children or empty_recursion(filtered_relation):
-                return None
 
             return filtered_relation
 
@@ -295,44 +294,82 @@ def filter_relation(
 A = TypeVar("A")
 B = TypeVar("B")
 
+# FIXME this is so broken, just tell the BasicRelation its
+# source and target prefixes, keep source_clip and target_clip
+# based at the root, keep using clip_sop if the prefix
+# is within the clip, or just use clip.at(clip.clip_path(prefix))
+# if it's not
+
 
 def clip_relation(
     relation: Relation[S, T],
     source_clip: SumProductNode[S, Any],
     target_clip: SumProductNode[T, Any],
+    source_prefix: SumProductPath[S] = (),
+    target_prefix: SumProductPath[T] = (),
 ) -> Relation[S, T]:
     match relation:
         case BasicRelation(source, target):
-            return BasicRelation(
-                clip_sop(source, source_clip), clip_sop(target, target_clip)
-            )
+            assert source and target
+            clipped_source_prefix = source_clip.clip_path(source_prefix)
+            if clipped_source_prefix == source_prefix:
+                source_clip = source_clip.at(source_prefix)
+                source = clip_sop(source, source_clip)
+            else:
+                source = source_clip.at(clipped_source_prefix)
+
+            clipped_target_prefix = target_clip.clip_path(target_prefix)
+            if clipped_target_prefix == target_prefix:
+                target_clip = target_clip.at(target_prefix)
+                target = clip_sop(target, target_clip)
+            else:
+                target = target_clip.at(clipped_target_prefix)
+
+            return BasicRelation(source, target)
 
         case ParallelRelation(children):
             # TODO needs changing when I use Between properly
-            return ParallelRelation(
-                tuple(
-                    {
-                        (
-                            (
-                                clip_relation(
-                                    child,
-                                    source_clip.at(clipped_between.source),
-                                    target_clip.at(clipped_between.target),
-                                )
-                                if not isinstance(child, int)
-                                else child
-                            ),
-                            clipped_between,
-                        ): None
-                        for child, between in children
-                        for clipped_between in (
-                            Between[S, T](
-                                source_clip.clip_path(between.source),
-                                target_clip.clip_path(between.target),
-                            ),
+            children = tuple(
+                (
+                    (
+                        clip_relation(
+                            child,
+                            source_clip,
+                            target_clip,
+                            between_source,
+                            between_target,
                         )
-                    }.keys()
+                        if not isinstance(child, int)
+                        else child
+                    ),
+                    clipped_between,
+                )
+                for child, between in children
+                for between_source in ((*source_prefix, *between.source),)
+                for between_target in ((*target_prefix, *between.target),)
+                for clipped_between in (
+                    Between[S, T](
+                        source_clip.clip_path(between_source)[len(source_prefix):],
+                        target_clip.clip_path(between_target)[len(target_prefix):],
+                    ),
                 )
             )
+            # Flatten child ParallelRelations with one child
+            children = tuple(
+                (
+                    (
+                        child.children[0][0],
+                        Between[S, T](
+                            (*between.source, *child.children[0][1].source),
+                            (*between.target, *child.children[0][1].target),
+                        ),
+                    )
+                    if isinstance(child, ParallelRelation) and len(child.children) == 1
+                    else (child, between)
+                )
+                for child, between in children
+            )
+            # Remove dupes
+            return ParallelRelation(tuple({child: None for child in children}.keys()))
         case SeriesRelation():
             raise NotImplementedError

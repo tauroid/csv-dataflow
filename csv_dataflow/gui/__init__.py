@@ -1,8 +1,7 @@
 from dataclasses import replace
 from functools import partial
 import inspect
-from itertools import accumulate, chain, islice
-from pathlib import Path
+from itertools import accumulate, chain, islice, repeat
 import pickle
 import time
 from typing import Any, Literal, MutableMapping, TypeIs, TypeVar, cast
@@ -23,7 +22,6 @@ from ..relation import (
     SeriesRelation,
     clip_relation,
     filter_relation,
-    iter_basic_relations,
     iter_relation_paths,
 )
 from ..sop import DeBruijn, SumProductNode, SumProductPath, map_node_data, sop_from_type
@@ -223,7 +221,7 @@ body > .sum {
     justify-content: center;
     gap: 6px;
 }
-.arrows > div div:has(div:not(:only-child)) {
+.arrows div:has(div:not(:only-child)) {
     border: 2px solid black;
     padding: 6px;
     border-radius: 10px;
@@ -235,7 +233,7 @@ body > .sum {
     border-radius: 5px;
     padding-bottom: 2px;
 }
-.arrows > div div:not(:has(div)):hover {
+.arrows div.highlighted {
     background-color: #dfb !important;
     border: 2px solid black;
 }
@@ -244,6 +242,11 @@ body > .sum {
 
 def basic_relation_id(relation: BasicRelation[S, T]) -> str:
     return f"rel-{hash(relation)}"
+
+
+def relation_id_from_path(path: tuple[RelationPathElement, ...]) -> str:
+    return f"rel_:{":".join(map(str, path))}"
+
 
 # FIXME using relation and filtered_relation, compute the
 # smallest set of relation ids that unambiguously show which
@@ -256,8 +259,89 @@ def basic_relation_id(relation: BasicRelation[S, T]) -> str:
 # then highlighting that top relation will be sufficient
 
 
+def assert_true(value: bool) -> bool:
+    assert value
+    return True
+
+
+def assert_isinstance(value: Any, typ: type[T], yes: bool = True) -> TypeIs[T]:
+    """
+    Make `yes` false if you want to assert it's not an instance
+    then return False
+    """
+    assert isinstance(value, typ) == yes
+    return yes
+
+
+def relation_ids_to_highlight(
+    filtered_relation: Relation[S, T],
+    full_relation: Relation[S, T] | None = None,
+    prefix: tuple[RelationPathElement, ...] = (),
+) -> tuple[str, ...] | None:
+    """
+    None means no discrepancy yet between filtered_relation and full_relation
+
+    So if the top returns None, highlight the top relation's id
+    """
+    match filtered_relation:
+        case BasicRelation(source, target):
+            if source is None and target is None:
+                return ()
+
+            if full_relation is None:
+                return (relation_id_from_path(prefix),)
+
+            # Both are populated and we assume from the structural
+            # recursion and how filtering works on BasicRelations
+            # that they are the same
+            assert filtered_relation == full_relation
+            return None
+        case ParallelRelation(children):
+            assert isinstance(full_relation, ParallelRelation) or full_relation is None
+            child_relation_ids = tuple(
+                relation_ids_to_highlight(
+                    filtered_child, full_child, (*prefix, ParallelChildIndex(i))
+                )
+                for i, (
+                    (filtered_child, filtered_between),
+                    (full_child, full_between),
+                ) in enumerate(
+                    zip(
+                        children,
+                        (
+                            full_relation.children
+                            if full_relation is not None
+                            else repeat((None, None))
+                        ),
+                    )
+                )
+                if assert_true(full_between is None or filtered_between == full_between)
+                and not assert_isinstance(filtered_child, int, False)
+                and not assert_isinstance(full_child, int, False)
+            )
+            if all(ids is None for ids in child_relation_ids):
+                return None
+            else:
+                return tuple(
+                    chain.from_iterable(
+                        (
+                            ids
+                            if ids is not None
+                            else (
+                                relation_id_from_path((*prefix, ParallelChildIndex(i))),
+                            )
+                        )
+                        for i, ids in enumerate(child_relation_ids)
+                    )
+                )
+        case SeriesRelation():
+            raise NotImplementedError
+
+
 def highlight_related_on_hover(
-    relation: Relation[S, T],
+    filtered_relation: Relation[S, T],
+    full_relation: Relation[S, T] | None = None,
+    relation_prefix: tuple[RelationPathElement, ...] = (),
     source_prefix: SumProductPath[S] = (),
     target_prefix: SumProductPath[T] = (),
 ) -> str:
@@ -265,15 +349,21 @@ def highlight_related_on_hover(
         lambda p: len(p) > 1,
         chain.from_iterable(
             accumulate(map(lambda x: (x,), path.flat()))
-            for path in iter_relation_paths(relation, source_prefix, target_prefix)
+            for path in iter_relation_paths(
+                filtered_relation, source_prefix, target_prefix
+            )
         ),
     )
     related_ids = (f"#{":".join(map(str, path))}" for path in set(relation_paths))
-    basic_relation_ids = set(
-        map(lambda r: f"#{basic_relation_id(r)}", iter_basic_relations(relation))
+    relation_ids = relation_ids_to_highlight(
+        filtered_relation, full_relation, relation_prefix
     )
+    if relation_ids is not None:
+        relation_ids = map(lambda relation_id: f"#{relation_id}", relation_ids)
+    else:
+        relation_ids = (f"#{relation_id_from_path(relation_prefix)}",)
     return (
-        f"on mouseover halt the event's bubbling toggle .highlighted on [{",".join(chain(related_ids, basic_relation_ids))}] until mouseout"
+        f"on mouseover halt the event's bubbling toggle .highlighted on [{",".join(chain(related_ids, relation_ids))}] until mouseout"
         if related_ids
         else ""
     )
@@ -281,13 +371,18 @@ def highlight_related_on_hover(
 
 def sop_html(
     sop: SumProductNode[Any, bool] | DeBruijn,
-    relation: Relation[S, T],
     path: RelationPath[S, T],
+    filtered_relation: Relation[S, T],
+    full_relation: Relation[S, T] | None = None,
 ) -> str:
     expand_path = f"/expanded/{path.to_str()}"
     path_id = f"{path.to_str(":")}"
 
-    hover = highlight_related_on_hover(relation) if path.sop_path else ""
+    hover = (
+        highlight_related_on_hover(filtered_relation, full_relation)
+        if path.sop_path
+        else ""
+    )
 
     label = path.flat()[-1]
 
@@ -307,11 +402,15 @@ def sop_html(
         def iter_child_htmls():
             for child_label, child in sop.children.items():
                 child_path = replace(path, sop_path=(*path.sop_path, child_label))
-                filtered_relation = filter_relation(relation, (child_path,))
+                filtered_relation_for_child = filter_relation(
+                    filtered_relation, (child_path,)
+                )
                 yield sop_html(
                     child,
-                    filtered_relation or replace(relation, children=()),
                     child_path,
+                    filtered_relation_for_child
+                    or replace(filtered_relation, children=()),
+                    full_relation,
                 )
 
         return inspect.cleandoc(
@@ -326,23 +425,13 @@ def sop_html(
         return f"""<div id="{path_id}" _="{hover}" hx-put="{expand_path}" hx-swap="outerHTML">{label}</div>"""
 
 
-def assert_isinstance(value: Any, typ: type[T], yes: bool = True) -> TypeIs[T]:
-    """
-    Make `yes` false if you want to assert it's not an instance
-    then return False
-    """
-    is_instance = isinstance(value, typ)
-    assert is_instance == yes
-    return is_instance
-
-
 def arrows_div(
     relation: Relation[S, T],
     relation_prefix: tuple[RelationPathElement, ...] = (),
     source_prefix: SumProductPath[S] = (),
     target_prefix: SumProductPath[T] = (),
 ) -> str:
-    relation_id = f".rel:{":".join(map(str, relation_prefix))}"
+    relation_id = relation_id_from_path(relation_prefix)
     match relation:
         case ParallelRelation(children):
             inner_arrows = "".join(
@@ -357,14 +446,14 @@ def arrows_div(
                 if not assert_isinstance(child, int, False)
             )
             return f"""
-                <div id="{relation_id}" _="{highlight_related_on_hover(relation, source_prefix, target_prefix)}">
+                <div id="{relation_id}" _="{highlight_related_on_hover(relation, relation, relation_prefix, source_prefix, target_prefix)}">
                 {inner_arrows}
                 </div>
             """
         case BasicRelation():
             return f"""
                 <div id="{relation_id}"
-                        _="{highlight_related_on_hover(relation, source_prefix, target_prefix)}">
+                        _="{highlight_related_on_hover(relation, relation, relation_prefix, source_prefix, target_prefix)}">
                     ⟶
                 </div>
             """
@@ -384,8 +473,8 @@ def relation_html(
     match relation:
         case BasicRelation() | ParallelRelation():
             sop_htmls = (
-                sop_html(source, relation, RelationPath("Source", ())),
-                sop_html(target, relation, RelationPath("Target", ())),
+                sop_html(source, RelationPath("Source", ()), relation, relation),
+                sop_html(target, RelationPath("Target", ()), relation, relation),
             )
             arrows = arrows_html(relation)
         case SeriesRelation():
@@ -402,6 +491,7 @@ def html(
     relation: Relation[S, T],
 ) -> str:
     """Args are only the parts to actually display on the page"""
+    print(relation)
     return inspect.cleandoc(
         f"""
         <!doctype html>
@@ -537,12 +627,14 @@ def set_session_path_expanded(
 @app.route("/expanded/<path:str_path>", methods=["PUT"])
 def expand(str_path: str) -> str:
     path = RelationPath[A, B].from_str(str_path)
+    sop, relation = set_session_path_expanded(path)
 
-    return sop_html(*set_session_path_expanded(path), path)
+    return sop_html(sop, path, relation)
 
 
 @app.route("/expanded/<path:str_path>", methods=["DELETE"])
 def collapse(str_path: str) -> str:
     path = RelationPath[A, B].from_str(str_path)
+    sop, relation = set_session_path_expanded(path, False)
 
-    return sop_html(*set_session_path_expanded(path, False), path)
+    return sop_html(sop, path, relation)
