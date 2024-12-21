@@ -14,7 +14,7 @@ flip = ParallelRelation[bool, bool](
     )
 )
 
-sop = SumProductNode[list[Any]](
+sop = SumProductNode[list[bool]](
     "+",
     frozendict[str, SumProductChild](
         {
@@ -26,7 +26,7 @@ sop = SumProductNode[list[Any]](
     ),
 )
 
-relation = ParallelRelation[list[Any], list[Any]](
+relation = ParallelRelation[list[bool], list[bool]](
     (
         (BasicRelation(UNIT, UNIT), Between(("empty",), ("empty",))),
         (flip, Between(("list", "head"), ("list", "head"))),

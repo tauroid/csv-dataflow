@@ -600,7 +600,8 @@ def root() -> str:
             <page-links>
                 <page-link><a href="/ex1-name-to-code">Example 1: Name to Code</a></page-link>
                 <page-link><a href="/ex1-name-to-option">Example 1: Name to Option</a></page-link>
-                <page-link><a href="/ex3">Example 3</a></page-link>
+                <page-link><a href="/ex3">Example 3: List head</a></page-link>
+                <page-link><a href="/ex4">Example 4: List map</a></page-link>
             </page-links>
         </body>
     </html>
@@ -628,6 +629,12 @@ def example_3() -> str:
     from examples.ex3.precompiled_list import sop, relation
 
     return relation_page("ex3", sop, sop, relation)
+
+@app.route("/ex4")
+def example_4() -> str:
+    from examples.ex4.mapflip import sop, relation
+
+    return relation_page("ex4", sop, sop, relation)
 
 
 def recalculate_session_visible_relation(
