@@ -7,6 +7,8 @@ import pickle
 import time
 from typing import Any, Literal, MutableMapping, TypeIs, TypeVar, cast
 from flask import Flask, g, Response, session
+from flask_session import Session
+from cachelib.file import FileSystemCache
 
 from pprint import pprint
 
@@ -32,7 +34,12 @@ from .visibility import compute_visible_sop
 typed_session = cast(MutableMapping[str, bytes], session)
 
 app = Flask(__name__)
-app.config.update(SECRET_KEY="hello")
+
+SESSION_TYPE="cachelib"
+SESSION_SERIALIZATION_FORMAT="json"
+SESSION_CACHELIB = FileSystemCache(threshold=500, cache_dir=".sessions")
+app.config.from_object(__name__)
+Session(app)
 
 
 @app.before_request
