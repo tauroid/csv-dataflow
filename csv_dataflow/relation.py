@@ -296,7 +296,9 @@ A = TypeVar("A")
 B = TypeVar("B")
 
 
-def assert_subpath_if_recursive(child: SumProductChild, between: Between[S, T]) -> bool:
+def assert_subpaths_if_recursive(
+    child: Relation[S, T] | DeBruijn, between: Between[S, T]
+) -> bool:
     if isinstance(child, int):
         assert between.source and between.target, (
             "Recursion in relations should happen between subpaths"
@@ -314,17 +316,17 @@ def clip_relation(
     target_prefix: SumProductPath[T] = (),
     prev_stack: ConsList[Relation[S, T]] = None,
 ) -> Relation[S, T]:
+    clipped_source_prefix = source_clip.clip_path(source_prefix)
+    clipped_target_prefix = target_clip.clip_path(target_prefix)
     match relation:
         case BasicRelation(source, target):
             assert source and target
-            clipped_source_prefix = source_clip.clip_path(source_prefix)
             if clipped_source_prefix == source_prefix:
                 source_clip = source_clip.at(source_prefix)
                 source = clip_sop(source, source_clip)
             else:
                 source = source_clip.at(clipped_source_prefix)
 
-            clipped_target_prefix = target_clip.clip_path(target_prefix)
             if clipped_target_prefix == target_prefix:
                 target_clip = target_clip.at(target_prefix)
                 target = clip_sop(target, target_clip)
@@ -334,6 +336,16 @@ def clip_relation(
             return BasicRelation(source, target)
 
         case ParallelRelation(children):
+            if (
+                clipped_source_prefix != source_prefix
+                and clipped_target_prefix != target_prefix
+            ):
+                # We're below clip so just summarise
+                return BasicRelation(
+                    source_clip.at(clipped_source_prefix),
+                    target_clip.at(clipped_target_prefix),
+                )
+
             stack = Cons(relation, prev_stack)
             children = tuple(
                 (
@@ -354,6 +366,7 @@ def clip_relation(
                     clipped_between,
                 )
                 for child, between in children
+                if assert_subpaths_if_recursive(child, between)
                 for between_source in ((*source_prefix, *between.source),)
                 for between_target in ((*target_prefix, *between.target),)
                 for clipped_between in (
