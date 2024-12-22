@@ -10,8 +10,11 @@ from typing import (
     TypeVar,
 )
 
+from csv_dataflow.cons import Cons, ConsList, at_index
+
 from .newtype import NewType
 from .sop import (
+    SumProductChild,
     SumProductNode,
     SumProductPath,
     clip_sop,
@@ -293,12 +296,23 @@ A = TypeVar("A")
 B = TypeVar("B")
 
 
+def assert_subpath_if_recursive(child: SumProductChild, between: Between[S, T]) -> bool:
+    if isinstance(child, int):
+        assert between.source and between.target, (
+            "Recursion in relations should happen between subpaths"
+            " of the source and target, so that clipping always"
+            " terminates"
+        )
+    return True
+
+
 def clip_relation(
     relation: Relation[S, T],
     source_clip: SumProductNode[S, Any],
     target_clip: SumProductNode[T, Any],
     source_prefix: SumProductPath[S] = (),
     target_prefix: SumProductPath[T] = (),
+    prev_stack: ConsList[Relation[S, T]] = None,
 ) -> Relation[S, T]:
     match relation:
         case BasicRelation(source, target):
@@ -320,19 +334,22 @@ def clip_relation(
             return BasicRelation(source, target)
 
         case ParallelRelation(children):
-            # TODO needs changing when I use Between properly
+            stack = Cons(relation, prev_stack)
             children = tuple(
                 (
                     (
                         clip_relation(
-                            child,
+                            (
+                                child
+                                if not isinstance(child, int)
+                                else at_index(stack, child)
+                            ),
                             source_clip,
                             target_clip,
                             between_source,
                             between_target,
+                            stack,
                         )
-                        if not isinstance(child, int)
-                        else child
                     ),
                     clipped_between,
                 )
