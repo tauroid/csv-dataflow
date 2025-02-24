@@ -4,9 +4,11 @@ class A: ...
 class B: ...
 
 @decompose
-def flip(b: A | B) -> A | B:
-    match b:
+def flip(x: A | B) -> A | B:
+    y: B | A
+    match x:
         case A():
-            return B()
+            y = B()
         case B():
-            return A()
+            y = A()
+    return y
