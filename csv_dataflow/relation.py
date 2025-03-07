@@ -14,7 +14,6 @@ from csv_dataflow.cons import Cons, ConsList, at_index
 
 from .newtype import NewType
 from .sop import (
-    SumProductChild,
     SumProductNode,
     SumProductPath,
     clip_sop,

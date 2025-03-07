@@ -27,7 +27,14 @@ from ..relation import (
     filter_relation,
     iter_relation_paths,
 )
-from ..sop import DeBruijn, SumProductNode, SumProductPath, map_node_data, sop_from_type
+from ..sop import (
+    UNIT,
+    DeBruijn,
+    SumProductNode,
+    SumProductPath,
+    map_node_data,
+    sop_from_type,
+)
 
 from .visibility import compute_visible_sop
 
@@ -35,8 +42,8 @@ typed_session = cast(MutableMapping[str, bytes], session)
 
 app = Flask(__name__)
 
-SESSION_TYPE="cachelib"
-SESSION_SERIALIZATION_FORMAT="json"
+SESSION_TYPE = "cachelib"
+SESSION_SERIALIZATION_FORMAT = "json"
 SESSION_CACHELIB = FileSystemCache(threshold=500, cache_dir=".sessions")
 app.config.from_object(__name__)
 Session(app)
@@ -602,6 +609,7 @@ def root() -> str:
                 <page-link><a href="/ex1-name-to-option">Example 1: Name to Option</a></page-link>
                 <page-link><a href="/ex3">Example 3: List head</a></page-link>
                 <page-link><a href="/ex4">Example 4: List map</a></page-link>
+                <page-link><a href="/ex5">Example 5: flip.py</a></page-link>
             </page-links>
         </body>
     </html>
@@ -630,11 +638,27 @@ def example_3() -> str:
 
     return relation_page("ex3", sop, sop, relation)
 
+
 @app.route("/ex4")
 def example_4() -> str:
     from examples.ex4.mapflip import sop, relation
 
     return relation_page("ex4", sop, sop, relation)
+
+
+@app.route("/ex5")
+def example_5() -> str:
+    from examples.ex5.flip import flip, A, B
+
+    # TODO get from flip instead
+    s = SumProductNode[A | B](
+        "+", {branch.match_type_name: UNIT for branch in flip.simple_ast.body.branches}
+    )
+    t = SumProductNode[B | A](
+        "+", {branch.return_type_name: UNIT for branch in flip.simple_ast.body.branches}
+    )
+
+    return relation_page("ex5", s, t, flip.as_relation)
 
 
 def recalculate_session_visible_relation(

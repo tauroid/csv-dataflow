@@ -3,6 +3,9 @@ import ast
 from dataclasses import dataclass
 from typing import TypeVar
 
+from .relation import Between, Relation, ParallelRelation, BasicRelation
+from .sop import UNIT, SumProductNode, SumProductPath, sop_from_type
+
 # NOTE this is going to be horrible and wrong for a while
 # in the sense of not supporting many parts of Python at all
 
@@ -153,22 +156,6 @@ class Function:
 
     body: Match  # Obviously more to add
 
-    def to_ast(self) -> ast.FunctionDef:
-        f = parse_as(
-            ast.FunctionDef,
-            "\n".join(
-                (
-                    f"def {self.fn_name}({self.arg_name}: {self.arg_type}) -> {self.return_type}:",
-                    "    pass",
-                )
-            ),
-        )
-        f.body = [
-            *self.body.to_ast(),
-            parse_as(ast.Return, f"return {self.body.result_var_name}"),
-        ]
-        return f
-
     @staticmethod
     def from_ast(f: ast.FunctionDef) -> Function:
         arg = f.args.args[0]
@@ -185,6 +172,34 @@ class Function:
             annotation_to_sum_type(f.returns),
             Match.from_ast((aa, m), arg_type),
         )
+
+    def to_ast(self) -> ast.FunctionDef:
+        f = parse_as(
+            ast.FunctionDef,
+            "\n".join(
+                (
+                    f"def {self.fn_name}({self.arg_name}: {self.arg_type}) -> {self.return_type}:",
+                    "    pass",
+                )
+            ),
+        )
+        f.body = [
+            *self.body.to_ast(),
+            parse_as(ast.Return, f"return {self.body.result_var_name}"),
+        ]
+        return f
+
+    def to_relation(self) -> Relation[S, T]:
+        return ParallelRelation[S, T](
+            tuple(
+                (
+                    BasicRelation(UNIT, UNIT),
+                    Between((branch.match_type_name,), (branch.return_type_name,)),
+                )
+                for branch in self.body.branches
+            )
+        )
+
 
 def asts_equal(a: ast.AST, b: ast.AST) -> bool:
     # When can this be wrong?
