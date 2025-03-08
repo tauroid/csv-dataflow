@@ -1,4 +1,3 @@
-from typing import Any
 from frozendict import frozendict
 from csv_dataflow.sop import UNIT, SumProductChild, SumProductNode
 from csv_dataflow.relation import BasicRelation, Between, ParallelRelation

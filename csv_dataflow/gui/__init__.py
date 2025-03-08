@@ -12,6 +12,9 @@ from cachelib.file import FileSystemCache
 
 from pprint import pprint
 
+from csv_dataflow.relation.clipping import clip_relation
+from csv_dataflow.relation.filtering import filter_relation
+from csv_dataflow.relation.iterators import iter_relation_paths
 from examples.ex1.types import A, B
 
 from ..csv import parallel_relation_from_csv
@@ -23,17 +26,12 @@ from ..relation import (
     RelationPath,
     RelationPathElement,
     SeriesRelation,
-    clip_relation,
-    filter_relation,
-    iter_relation_paths,
 )
 from ..sop import (
-    UNIT,
     DeBruijn,
     SumProductNode,
     SumProductPath,
     map_node_data,
-    sop_from_type,
 )
 
 from .visibility import compute_visible_sop
@@ -648,17 +646,9 @@ def example_4() -> str:
 
 @app.route("/ex5")
 def example_5() -> str:
-    from examples.ex5.flip import flip, A, B
+    from examples.ex5.flip import flip
 
-    # TODO get from flip instead
-    s = SumProductNode[A | B](
-        "+", {branch.match_type_name: UNIT for branch in flip.simple_ast.body.branches}
-    )
-    t = SumProductNode[B | A](
-        "+", {branch.return_type_name: UNIT for branch in flip.simple_ast.body.branches}
-    )
-
-    return relation_page("ex5", s, t, flip.as_relation)
+    return relation_page("ex5", *flip.as_sops_and_relation)
 
 
 def recalculate_session_visible_relation(

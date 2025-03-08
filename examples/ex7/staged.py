@@ -16,7 +16,7 @@ class Finch:
 
 @dataclass(frozen=True)
 class Eagle:
-    manicured: bool
+    pedicured: bool
 
 @dataclass(frozen=True)
 class X:
@@ -39,8 +39,8 @@ def bathe(finch: Finch) -> Finch:
     return replace(finch, clean=True)
 
 @decompose
-def manicure(eagle: Eagle) -> Eagle:
-    return replace(eagle, manicured=True)
+def pedicure(eagle: Eagle) -> Eagle:
+    return replace(eagle, pedicured=True)
 
 
 @decompose
@@ -51,6 +51,6 @@ def f(caged: Cage[Finch | Eagle]) -> Cage[Finch | Eagle]:
         case Finch():
             bird = bathe(bird)
         case Eagle():
-            bird = manicure(bird)
+            bird = pedicure(bird)
 
     return cage(bird)

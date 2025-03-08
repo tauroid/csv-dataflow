@@ -34,16 +34,18 @@ def compute_visible_sop(
         # Shouldn't happen
         raise NotImplementedError
 
-    def int_to_none(v: int | SumProductNode[T, bool]) -> SumProductNode[T, bool] | None:
-        return None if isinstance(v, int) else v
+    def de_bruijn_to_none(
+        v: DeBruijn | SumProductNode[T, bool],
+    ) -> SumProductNode[T, bool] | None:
+        return None if isinstance(v, DeBruijn) else v
 
     visible_children: dict[str, SumProductChild[bool]] = {
         path: child
         for path in child_paths
         for child in (
             compute_visible_sop(
-                int_to_none(selected.children[path]) if selected else None,
-                int_to_none(expanded.children[path]) if expanded else None,
+                de_bruijn_to_none(selected.children[path]) if selected else None,
+                de_bruijn_to_none(expanded.children[path]) if expanded else None,
                 expanded.data if expanded else False,
             ),
         )
