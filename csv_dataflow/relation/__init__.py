@@ -55,7 +55,6 @@ class RelationPath(Generic[S, T]):
     def to_str(self, separator: str = "/") -> str:
         return separator.join(map(str, self.flat()))
 
-
 @dataclass(frozen=True)
 class BasicRelation(Generic[S, T]):
     """
@@ -81,6 +80,19 @@ class BasicRelation(Generic[S, T]):
     source: SumProductNode[S] | None
     target: SumProductNode[T] | None
 
+
+@dataclass(frozen=True)
+class Copy(Generic[S,T]):
+    """
+    Individually relates everything under `source` to its counterpart
+    under each leaf of `target`
+
+    This means that all the selected branches in the full target tree
+    must at least have the source branch as a subtree (all paths in
+    source branch exist in target branches)
+    """
+    source: SumProductPath[S] | None
+    target: SumProductNode[T] | None
 
 @dataclass(frozen=True)
 class Between(Generic[S, T]):
