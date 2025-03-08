@@ -84,12 +84,24 @@ class BasicRelation(Generic[S, T]):
 @dataclass(frozen=True)
 class Copy(Generic[S,T]):
     """
-    Individually relates everything under `source` to its counterpart
-    under each leaf of `target`
+    Individually relates every leaf (and closure under "*" of leaves)
+    under `source`, in the full source type, to its counterpart under
+    each leaf of `target`, in the full target type
 
     This means that all the selected branches in the full target tree
     must at least have the source branch as a subtree (all paths in
     source branch exist in target branches)
+
+    This works differently from a BasicRelation because in that case
+    the relationship between leaves of selected branches is just
+    undefined (if we're even going to allow selecting not-leaves in
+    BasicRelations)
+
+    NOTE it may be useful in future to relax this to be symmetric.
+         that would mean this only kicks in if all source branches
+         have the same value
+
+         interesting semantics; "copy if identical"
     """
     source: SumProductPath[S] | None
     target: SumProductNode[T] | None
