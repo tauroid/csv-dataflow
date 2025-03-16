@@ -23,6 +23,12 @@ type Relation[S, T] = (
     BasicRelation[S, T] | ParallelRelation[S, T] | SeriesRelation[S, T]
 )
 
+@dataclass(frozen=True)
+class Triple[S,T]:
+    source: SumProductNode[S]
+    target: SumProductNode[T]
+    relation: Relation[S,T]
+
 
 class StageIndex(NewType[int]): ...
 
@@ -58,19 +64,20 @@ class RelationPath(Generic[S, T]):
 @dataclass(frozen=True)
 class BasicRelation(Generic[S, T]):
     """
-    This is a binary relation, between all path groupings that "fill" the
-    source or target path sets in the sense that for a particular grouping,
-    everything in the relevant path set must either be in the grouping,
-    or be on a path that is an alternative to something that _is_ in the
-    grouping.
+    This is a binary relation, between all path groupings that
+    "fill" the source or target path sets in the sense that for a
+    particular grouping, everything in the relevant path set must
+    either be in the grouping, or be on a path that is an
+    alternative to something that _is_ in the grouping.
 
-    So the relation of a link is { (g,h) | g ∈ G, h ∈ H }, for the set
-    G of all full groupings on the left side, and the set H of all full
-    groupings on the right side.
+    So the relation of a link is { (g,h) | g ∈ G, h ∈ H }, for
+    the set G of all full groupings on the left side, and the set
+    H of all full groupings on the right side.
 
-    This is complicated somewhat on purpose, because then I don't need to
-    reprocess wacked out CSVs into something sensible, and also can give
-    them meaning (even if that meaning doesn't turn out to be a function).
+    This is complicated somewhat on purpose, because then I don't
+    need to reprocess wacked out CSVs into something sensible,
+    and also can give them meaning (even if that meaning doesn't
+    turn out to be a function).
 
     Allowing `source` and `target` to be None mainly because
     I don't want to make a separate FilteredXRelation set of
@@ -84,26 +91,26 @@ class BasicRelation(Generic[S, T]):
 @dataclass(frozen=True)
 class Copy(Generic[S,T]):
     """
-    Individually relates every leaf (and closure under "*" of leaves)
-    under `source`, in the full source type, to its counterpart under
+    Individually relates every leaf (and closure under "*" of
+    leaves) under each leaf of `source`, in the full source type,
+    to its counterpart under each other leaf of `source`, and
     each leaf of `target`, in the full target type
 
-    This means that all the selected branches in the full target tree
-    must at least have the source branch as a subtree (all paths in
-    source branch exist in target branches)
+    This means that all the selected source branches must be the
+    same, and all the selected target branches must have at least
+    have this source branch as a subtree (all paths in source
+    branch exist in target branches)
+
+    The semantics as a function are a bit weird - basically "if
+    the source values are the same, copy that value to all the
+    target locations"
 
     This works differently from a BasicRelation because in that case
     the relationship between leaves of selected branches is just
     undefined (if we're even going to allow selecting not-leaves in
     BasicRelations)
-
-    NOTE it may be useful in future to relax this to be symmetric.
-         that would mean this only kicks in if all source branches
-         have the same value
-
-         interesting semantics; "copy if identical"
     """
-    source: SumProductPath[S] | None
+    source: SumProductNode[S] | None
     target: SumProductNode[T] | None
 
 @dataclass(frozen=True)

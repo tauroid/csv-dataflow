@@ -7,7 +7,6 @@ from ..sop import DeBruijn, SumOrProduct, SumProductChild, SumProductNode
 S = TypeVar("S")
 T = TypeVar("T")
 
-
 def combine_same(a: T, b: T) -> T:
     assert a == b
     return a

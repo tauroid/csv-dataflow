@@ -17,7 +17,7 @@ target = SumProductNode[tuple[SomethingOrOther, SomethingOrOther]](
 )
 
 relation = Copy[SomethingOrOther, tuple[SomethingOrOther, SomethingOrOther]](
-    (),
+    UNIT,
     SumProductNode[tuple[SomethingOrOther, SomethingOrOther]](
         "*", {"t0": UNIT, "t1": UNIT}
     ),
