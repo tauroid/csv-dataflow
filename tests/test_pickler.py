@@ -2,7 +2,7 @@ import pickle
 import pytest
 
 from dataclasses import dataclass
-from csv_dataflow.gui.session.pickler import (
+from csv_dataflow.gui.state.pickler import (
     NoAttachedKVStoreError,
     NotADataclass,
     attach_pickle_store,
@@ -96,7 +96,19 @@ def test_pickler_missing_args():
         y: str = field_pickler()
 
     with pytest.raises(TypeError):
-        Thing(5)
+        Thing(y="hello")  # type: ignore
+
+
+def test_pickler_no_init_and_existing_store():
+    @pickler
+    @dataclass
+    class Thing:
+        x: int = field_pickler()
+
+    thing = Thing()
+    store = {"thing_x": pickle.dumps(5)}
+    attach_pickle_store(thing, store, "thing")
+    assert 5 == thing.x
 
 
 def test_pickler_default_args():
@@ -126,3 +138,13 @@ def test_pickler_no_store():
     assert "boo" == thing.y
     with pytest.raises(NoAttachedKVStoreError):
         thing.y = "hi"
+
+def test_pickler_construct_twice():
+    """Bad implementation made this not work before"""
+    @pickler
+    @dataclass
+    class Thing:
+        x: int
+
+    Thing(5)
+    Thing(6)

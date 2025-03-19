@@ -5,11 +5,9 @@ import inspect
 from types import FunctionType
 from typing import Callable, Generic, TypeVar, cast
 
-from csv_dataflow.sop import SumProductNode
-
 from .ast_to_relation import asts_equal
 from .ast_to_relation.simple_ast.function import Function
-from .relation import Relation
+from .relation import Triple
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -39,10 +37,8 @@ class DecomposedFunction(Generic[S, T]):
 
     @property
     @cache
-    def as_sops_and_relation(
-        self,
-    ) -> tuple[SumProductNode[S], SumProductNode[T], Relation[S, T]]:
-        return self.simple_ast.as_sops_and_relation
+    def as_triple(self) -> Triple[S,T]:
+        return self.simple_ast.as_triple
 
 
 def decompose(f: Callable[[S], T]) -> DecomposedFunction[S, T]:

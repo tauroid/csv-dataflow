@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import TypeVar
 
 from .cons import Cons, ConsList, at_index
-from .relation import BasicRelation, Between, ParallelRelation
+from .relation import (
+    BasicRelation,
+    Between,
+    ParallelRelation,
+    Triple,
+)
 from .sop import (
     SumProductChild,
     SumProductNode,
@@ -35,9 +40,15 @@ def select_given_csv_paths(
 
     stack = Cons(sop, prev_stack)
 
-    def immediate_name_paths_for(child_path: str) -> tuple[tuple[str, ...], ...]:
+    def immediate_name_paths_for(
+        child_path: str,
+    ) -> tuple[tuple[str, ...], ...]:
         return (
-            *(tuple(tail) for head, *tail in name_paths if head == child_path),
+            *(
+                tuple(tail)
+                for head, *tail in name_paths
+                if head == child_path
+            ),
             *(
                 tuple(tail)
                 for head, *tail in immediate_name_paths
@@ -46,7 +57,8 @@ def select_given_csv_paths(
         )
 
     child_immediate_name_paths = {
-        path: immediate_name_paths_for(path) for path in sop.children
+        path: immediate_name_paths_for(path)
+        for path in sop.children
     }
 
     # The filtered children have either one or more given paths, or
@@ -69,7 +81,11 @@ def select_given_csv_paths(
                                     else at_index(stack, child)
                                 ),
                                 # No new matches in the mirror realm
-                                name_paths if not isinstance(child, int) else (),
+                                (
+                                    name_paths
+                                    if not isinstance(child, int)
+                                    else ()
+                                ),
                                 child_immediate_name_paths[path],
                                 stack,
                             )
@@ -84,7 +100,9 @@ def select_given_csv_paths(
         ),
     )
 
-    if not filtered_sop.children or empty_recursion(filtered_sop):
+    if not filtered_sop.children or empty_recursion(
+        filtered_sop
+    ):
         return None
 
     return filtered_sop
@@ -105,7 +123,7 @@ def csv_name_to_name_path(csv_name: str) -> tuple[str, ...]:
 
 def parallel_relation_from_csv(
     s: type[S], t: type[T], csv_path: Path
-) -> tuple[SumProductNode[S], SumProductNode[T], ParallelRelation[S, T]]:
+) -> Triple[S, T]:
     sop_s = sop_from_type(s)
     sop_t = sop_from_type(t)
 
@@ -132,7 +150,10 @@ def parallel_relation_from_csv(
                 if value == "":
                     continue
 
-                value_path = (*csv_name_to_name_path(name), value)
+                value_path = (
+                    *csv_name_to_name_path(name),
+                    value,
+                )
 
                 match end:
                     case Source():
@@ -145,9 +166,13 @@ def parallel_relation_from_csv(
             source_value_paths_tuple = tuple(source_value_paths)
             target_value_paths_tuple = tuple(target_value_paths)
 
-            sop_s_with_values = add_path_values(sop_s, source_value_paths_tuple)
+            sop_s_with_values = add_path_values(
+                sop_s, source_value_paths_tuple
+            )
             assert not isinstance(sop_s_with_values, int)
-            sop_t_with_values = add_path_values(sop_t, target_value_paths_tuple)
+            sop_t_with_values = add_path_values(
+                sop_t, target_value_paths_tuple
+            )
             assert not isinstance(sop_t_with_values, int)
 
             source = select_given_csv_paths(
@@ -163,13 +188,19 @@ def parallel_relation_from_csv(
 
             relations.append(BasicRelation(source, target))
 
-    sop_s_with_all_values = add_path_values(sop_s, tuple(all_source_value_paths))
+    sop_s_with_all_values = add_path_values(
+        sop_s, tuple(all_source_value_paths)
+    )
     assert not isinstance(sop_s_with_all_values, int)
-    sop_t_with_all_values = add_path_values(sop_t, tuple(all_target_value_paths))
+    sop_t_with_all_values = add_path_values(
+        sop_t, tuple(all_target_value_paths)
+    )
     assert not isinstance(sop_t_with_all_values, int)
 
-    return (
+    return Triple(
         sop_s_with_all_values,
         sop_t_with_all_values,
-        ParallelRelation(tuple(zip(relations, repeat(Between[S, T]((), ()))))),
+        ParallelRelation(
+            tuple(zip(relations, repeat(Between[S, T]((), ()))))
+        ),
     )

@@ -5,11 +5,20 @@ from functools import cache
 from typing import Any
 
 from csv_dataflow.ast_to_relation import parse_as
-from csv_dataflow.ast_to_relation.types import SumType, annotation_to_sum_type
-from csv_dataflow.relation import BasicRelation, Between, ParallelRelation, Relation
-from csv_dataflow.sop import UNIT, SumProductNode
+from csv_dataflow.ast_to_relation.types import (
+    SumType,
+    annotation_to_sum_type,
+)
+from csv_dataflow.relation import (
+    BasicRelation,
+    Between,
+    ParallelRelation,
+    Triple,
+)
+from csv_dataflow.sop import UNIT
 
 from .match import Match
+
 
 @dataclass(frozen=True)
 class Function:
@@ -51,23 +60,26 @@ class Function:
         )
         f.body = [
             *self.body.to_ast(),
-            parse_as(ast.Return, f"return {self.body.result_var_name}"),
+            parse_as(
+                ast.Return, f"return {self.body.result_var_name}"
+            ),
         ]
         return f
 
     @property
     @cache
-    def as_sops_and_relation(
-        self,
-    ) -> tuple[SumProductNode[Any], SumProductNode[Any], Relation[Any, Any]]:
-        return (
+    def as_triple(self) -> Triple[Any, Any]:
+        return Triple(
             self.arg_type.as_sop,
             self.return_type.as_sop,
             ParallelRelation(
                 tuple(
                     (
                         BasicRelation(UNIT, UNIT),
-                        Between((branch.match_type_name,), (branch.return_type_name,)),
+                        Between(
+                            (branch.match_type_name,),
+                            (branch.return_type_name,),
+                        ),
                     )
                     for branch in self.body.branches
                 )

@@ -1,12 +1,12 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Generic, Self, TypeVar
 
-from csv_dataflow.gui.session.pickler import (
+from csv_dataflow.gui.state.pickler import (
     field_pickler,
     pickler,
 )
-from csv_dataflow.gui.session.user_state import TripleUserState
+from csv_dataflow.gui.state.user_state import TripleUserState
 from csv_dataflow.gui.visibility import compute_visible_sop
 from csv_dataflow.relation import Relation, Triple
 from csv_dataflow.relation.clipping import clip_relation
@@ -18,7 +18,7 @@ T = TypeVar("T")
 
 @pickler
 @dataclass
-class TripleVisibility(Generic[S, T]):
+class VisibleTriple(Generic[S, T]):
     source: SumProductNode[S, bool] = field_pickler()
     target: SumProductNode[T, bool] = field_pickler()
     relation: Relation[S, T] = field_pickler()
@@ -26,7 +26,7 @@ class TripleVisibility(Generic[S, T]):
     @classmethod
     def from_user_state(
         cls, user_state: TripleUserState[S, T]
-    ) -> TripleVisibility[S, T]:
+    ) -> Self:
         source = compute_visible_sop(
             user_state.source.selected,
             user_state.source.expanded,
@@ -50,24 +50,31 @@ class TripleVisibility(Generic[S, T]):
 
 @pickler
 @dataclass
-class TripleSession(Generic[S, T]):
+class TripleState(Generic[S, T]):
     user_state: TripleUserState[S, T]
-    visibility: TripleVisibility[S, T]
+    visible: VisibleTriple[S, T]
+
+    @classmethod
+    def uninitialised(cls) -> Self:
+        return cls(
+            TripleUserState[S,T].uninitialised(),
+            VisibleTriple()
+        )
 
     @classmethod
     def from_triple(
         cls, triple: Triple[S, T]
-    ) -> TripleSession[S, T]:
+    ) -> Self:
         user_state = TripleUserState[S, T].from_triple(triple)
         return cls(
             user_state,
-            TripleVisibility[S, T].from_user_state(user_state),
+            VisibleTriple[S, T].from_user_state(user_state),
         )
 
-    def recalculate_visibility(self) -> None:
-        visibility = TripleVisibility[S, T].from_user_state(
+    def recalculate_visible(self) -> None:
+        visible = VisibleTriple[S, T].from_user_state(
             self.user_state
         )
-        self.visibility.source = visibility.source
-        self.visibility.target = visibility.target
-        self.visibility.relation = visibility.relation
+        self.visible.source = visible.source
+        self.visible.target = visible.target
+        self.visible.relation = visible.relation

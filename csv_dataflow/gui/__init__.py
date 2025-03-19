@@ -1,9 +1,7 @@
-from functools import partial
 import inspect
 from pathlib import Path
-import pickle
 import time
-from typing import Any, Literal, MutableMapping, TypeVar, cast
+from typing import Any, MutableMapping, TypeVar, cast
 from flask import Flask, g, Response, session
 from flask_session import Session
 from cachelib.file import FileSystemCache
@@ -11,23 +9,21 @@ from cachelib.file import FileSystemCache
 from pprint import pprint
 
 from csv_dataflow.gui.html.relation import relation_html
-from csv_dataflow.gui.session.pickler import attach_pickle_store
-from csv_dataflow.gui.session.session import (
-    TripleSession,
-    TripleVisibility,
+from csv_dataflow.gui.html.sop import sop_html
+from csv_dataflow.gui.path_expansion import (
+    set_session_path_expanded,
+)
+from csv_dataflow.gui.state.pickler import attach_pickle_store
+from csv_dataflow.gui.state.triple import (
+    TripleState,
+    VisibleTriple,
 )
 from examples.ex1.types import A, B
 
 from ..csv import parallel_relation_from_csv
 from ..relation import (
-    Relation,
     RelationPath,
     Triple,
-)
-from ..sop import (
-    SumProductNode,
-    SumProductPath,
-    map_node_data,
 )
 
 typed_session = cast(MutableMapping[str, bytes], session)
@@ -76,7 +72,7 @@ css = (Path(__file__).parent / "style.css").read_text()
 # then highlighting that top relation will be sufficient
 
 
-def html(page_name: str, visible: TripleVisibility[S, T]) -> str:
+def html(page_name: str, visible: VisibleTriple[S, T]) -> str:
     """Args are only the parts to actually display on the page"""
     return inspect.cleandoc(
         f"""
@@ -94,28 +90,13 @@ def html(page_name: str, visible: TripleVisibility[S, T]) -> str:
 
 
 def relation_page(name: str, triple: Triple[S, T]) -> str:
-    triple_session = TripleSession[S, T].from_triple(triple)
-    attach_pickle_store(triple_session, typed_session, name)
-    # The above will have clobbered it with existing state but we do
-    # want fresh visibility
-    triple_session.recalculate_visibility()
-    return html(name, triple_session.visibility)
+    state = TripleState[S, T].from_triple(triple)
+    attach_pickle_store(state, typed_session, name)
+    return html(name, state.visible)
 
 
 @app.route("/")
 def root() -> str:
-    # relation_1 = parallel_relation_from_csv(
-    #     A, B, Path("examples/ex1/a_name_to_b_code.csv")
-    # )
-    # source, target, relation = parallel_relation_from_csv(
-    #     A, B, Path("examples/ex1/a_name_to_b_option.csv")
-    # )
-    # relation = ParallelRelation(
-    #     relation_1.source,
-    #     relation_1.target,
-    #     (relation_1, relation_2)
-    # )
-
     return """
     <!doctype html>
     <html>
@@ -152,7 +133,7 @@ def root() -> str:
 def example_1_name_to_code() -> str:
     return relation_page(
         "ex1-name-to-code",
-        *parallel_relation_from_csv(
+        parallel_relation_from_csv(
             A, B, Path("examples/ex1/a_name_to_b_code.csv")
         ),
     )
@@ -162,7 +143,7 @@ def example_1_name_to_code() -> str:
 def example_1_name_to_option() -> str:
     return relation_page(
         "ex1-name-to-option",
-        *parallel_relation_from_csv(
+        parallel_relation_from_csv(
             A, B, Path("examples/ex1/a_name_to_b_option.csv")
         ),
     )
@@ -172,96 +153,31 @@ def example_1_name_to_option() -> str:
 def example_3() -> str:
     from examples.ex3.precompiled_list import sop, relation
 
-    return relation_page("ex3", sop, sop, relation)
+    return relation_page("ex3", Triple(sop, sop, relation))
 
 
 @app.route("/ex4")
 def example_4() -> str:
     from examples.ex4.mapflip import sop, relation
 
-    return relation_page("ex4", sop, sop, relation)
+    return relation_page("ex4", Triple(sop, sop, relation))
 
 
 @app.route("/ex5")
 def example_5() -> str:
     from examples.ex5.flip import flip
 
-    return relation_page("ex5", *flip.as_sops_and_relation)
-
-
-def set_session_point_path_expanded(
-    name: str,
-    point: Literal["Source", "Target"],
-    path: SumProductPath[Any],
-    yes: bool = True,
-) -> tuple[SumProductNode[Any, bool], Relation[Any, Any]]:
-    """Returns new visible sop and relation"""
-    expanded_key = f"{name}_{point.lower()}_expanded"
-    expanded: SumProductNode[Any, bool] = pickle.loads(
-        typed_session[expanded_key]
-    )
-    expanded = expanded.replace_data_at(path, yes)
-    if yes:
-        # Expand recursion
-        for child in expanded.at(path).children:
-            child_path = (*path, child)
-            expanded = expanded.replace_at(
-                child_path,
-                map_node_data(
-                    lambda _: False, expanded.at(child_path)
-                ),
-            )
-    typed_session[expanded_key] = pickle.dumps(expanded)
-    match point:
-        case "Source":
-            recalculate = partial(
-                recalculate_session_visible_relation,
-                name,
-                source_expanded=expanded,
-                target_expanded=pickle.loads(
-                    typed_session[f"{name}_target_expanded"]
-                ),
-            )
-        case "Target":
-            recalculate = partial(
-                recalculate_session_visible_relation,
-                name,
-                source_expanded=pickle.loads(
-                    typed_session[f"{name}_source_expanded"]
-                ),
-                target_expanded=expanded,
-            )
-
-    s, t, r = recalculate(
-        pickle.loads(typed_session[f"{name}_relation"]),
-        pickle.loads(typed_session[f"{name}_source_selected"]),
-        pickle.loads(typed_session[f"{name}_target_selected"]),
-    )
-
-    match point:
-        case "Source":
-            return s, r
-        case "Target":
-            return t, r
-
-
-def set_session_path_expanded(
-    name: str, path: RelationPath[Any, Any], yes: bool = True
-) -> tuple[SumProductNode[Any, bool], Relation[Any, Any]]:
-    return set_session_point_path_expanded(
-        name, path.point, path.sop_path, yes
-    )
+    return relation_page("ex5", flip.as_triple)
 
 
 @app.route(
     "/<page_name>/expanded/<path:str_path>", methods=["PUT"]
 )
 def expand(page_name: str, str_path: str) -> str:
-    path = RelationPath[A, B].from_str(str_path)
-    sop, relation = set_session_path_expanded(page_name, path)
-
-    print(page_name)
-
+    path = RelationPath[Any, Any].from_str(str_path)
+    sop, relation = set_session_path_expanded(
+        typed_session, page_name, path, True
+    )
     return sop_html(page_name, sop, path, relation)
 
 
@@ -269,9 +185,9 @@ def expand(page_name: str, str_path: str) -> str:
     "/<page_name>/expanded/<path:str_path>", methods=["DELETE"]
 )
 def collapse(page_name: str, str_path: str) -> str:
-    path = RelationPath[A, B].from_str(str_path)
+    path = RelationPath[Any, Any].from_str(str_path)
     sop, relation = set_session_path_expanded(
-        page_name, path, False
+        typed_session, page_name, path, False
     )
 
     return sop_html(page_name, sop, path, relation)

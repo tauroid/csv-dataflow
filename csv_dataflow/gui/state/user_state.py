@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from csv_dataflow.gui.session.pickler import (
+from csv_dataflow.gui.state.pickler import (
     field_pickler,
     pickler,
 )
@@ -36,6 +36,10 @@ class TripleUserState(Generic[S, T]):
     relation: Relation[S, T] = field_pickler()
 
     @classmethod
+    def uninitialised(cls) -> TripleUserState[S, T]:
+        return cls(SOPUserState(), SOPUserState())
+
+    @classmethod
     def from_triple(
         cls, triple: Triple[S, T]
     ) -> TripleUserState[S, T]:
@@ -44,5 +48,3 @@ class TripleUserState(Generic[S, T]):
             SOPUserState[T].from_sop(triple.target),
             triple.relation,
         )
-
-

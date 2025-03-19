@@ -145,19 +145,24 @@ class _AttachPickleStore(Generic[T]):
         return f
 
 
-def _pickler_constructor(cls: type[Any]) -> Any:
-    def c(_: type[Any], *args: Any, **kwargs: Any) -> Any:
+def _pickler_constructor(
+    cls: type[Any], ordinary_fields: tuple[str, ...]
+) -> Any:
+    def c(obj: Any, *args: Any, **kwargs: Any) -> Any:
+        obj._init_vars = cls._init_vars.copy()
+        obj._cached = cls._cached.copy()
+
         for kw, arg in kwargs.items():
-            cls._init_vars[kw] = arg
+            obj._init_vars[kw] = arg
 
         for arg, field in zip(args, fields(cls)):
-            assert field.name not in cls._init_vars
-            cls._init_vars[field.name] = arg
+            assert field.name not in obj._init_vars
+            obj._init_vars[field.name] = arg
 
         missing_args: list[str] = []
-        for field in fields(cls):
-            if field.name not in cls._init_vars:
-                missing_args.append(field.name)
+        for name in ordinary_fields:
+            if name not in obj._init_vars:
+                missing_args.append(name)
 
         if missing_args:
             raise TypeError(
@@ -237,7 +242,9 @@ def pickler(cls_t: type[T]) -> type[T]:
         tuple(field_picklers), tuple(ordinary_fields)
     )
 
-    cls.__init__ = _pickler_constructor(cls)
+    cls.__init__ = _pickler_constructor(
+        cls, tuple(ordinary_fields)
+    )
 
     return cls
 
