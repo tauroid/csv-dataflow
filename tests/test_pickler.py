@@ -123,5 +123,6 @@ def test_pickler_no_store():
 
     thing = Thing(5)
     assert False == thing.z
+    assert "boo" == thing.y
     with pytest.raises(NoAttachedKVStoreError):
-        thing.y
+        thing.y = "hi"

@@ -69,6 +69,9 @@ class _KVStoreFieldReference:
 
 class _FieldPicklerGet(Generic[T], _KVStoreFieldReference):
     def __call__(self, parent: Any) -> T:
+        if parent._store is None:
+            return parent._init_vars[self.name]
+
         if self.key in parent._cached:
             return parent._cached[self.key]
 
@@ -86,8 +89,8 @@ class _FieldPicklerGet(Generic[T], _KVStoreFieldReference):
 
 class _FieldPicklerSet(Generic[T], _KVStoreFieldReference):
     def __call__(self, parent: Any, value: T) -> None:
-        parent._cached[self.key] = value
         parent._store[self.key] = pickle.dumps(value)
+        parent._cached[self.key] = value
 
 
 @dataclass
