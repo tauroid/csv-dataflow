@@ -1,3 +1,4 @@
+from dataclasses import replace
 import inspect
 from pathlib import Path
 import time
@@ -92,6 +93,14 @@ def html(page_name: str, visible: VisibleTriple[S, T]) -> str:
 def relation_page(name: str, triple: Triple[S, T]) -> str:
     state = TripleState[S, T].from_triple(triple)
     attach_pickle_store(state, typed_session, name)
+    # Expand top level
+    state.user_state.source.expanded = replace(
+        state.user_state.source.expanded, data=True
+    )
+    state.user_state.target.expanded = replace(
+        state.user_state.target.expanded, data=True
+    )
+    state.recalculate_visible()
     return html(name, state.visible)
 
 

@@ -51,20 +51,13 @@ class _KVStoreFieldReference:
     Index in _init_vars
     (as that's defined before we know what the prefix is)
     """
-    prefix: str | None = None
 
-    _key: str | None = None
-
-    @property
-    def key(self) -> str:
+    def key(self, prefix: str | None) -> str:
         """Index in every other pickler impl attribute"""
-        if self._key is None:
-            if self.prefix is None:
-                raise NoAttachedKVStoreError()
+        if prefix is None:
+            raise NoAttachedKVStoreError()
 
-            self._key = f"{self.prefix}_{self.name}"
-
-        return self._key
+        return f"{prefix}_{self.name}"
 
 
 class _FieldPicklerGet(Generic[T], _KVStoreFieldReference):
@@ -72,25 +65,28 @@ class _FieldPicklerGet(Generic[T], _KVStoreFieldReference):
         if parent._store is None:
             return parent._init_vars[self.name]
 
-        if self.key in parent._cached:
-            return parent._cached[self.key]
+        key = self.key(parent._prefix)
 
-        if self.key in parent._store:
-            value = pickle.loads(parent._store[self.key])
+        if key in parent._cached:
+            return parent._cached[key]
+
+        if key in parent._store:
+            value = pickle.loads(parent._store[key])
         else:
             assert self.name in parent._init_vars
             value = parent._init_vars[self.name]
-            parent._store[self.key] = pickle.dumps(value)
+            parent._store[key] = pickle.dumps(value)
 
-        parent._cached[self.key] = value
+        parent._cached[key] = value
 
         return value
 
 
 class _FieldPicklerSet(Generic[T], _KVStoreFieldReference):
     def __call__(self, parent: Any, value: T) -> None:
-        parent._store[self.key] = pickle.dumps(value)
-        parent._cached[self.key] = value
+        key = self.key(parent._prefix)
+        parent._store[key] = pickle.dumps(value)
+        parent._cached[key] = value
 
 
 @dataclass
@@ -123,13 +119,11 @@ class _AttachPickleStore(Generic[T]):
             prefix: str,
             parent: Any | None = None,
         ) -> None:
+            obj._prefix = prefix
             obj._parent = parent
             obj._store = store
 
             for name in self.field_picklers:
-                pickler = getattr(objtype, name)
-                pickler.fget.prefix = prefix
-                pickler.fset.prefix = prefix
                 # Bring initvar through into the store
                 getattr(obj, name)
 
@@ -149,6 +143,7 @@ def _pickler_constructor(
     cls: type[Any], ordinary_fields: tuple[str, ...]
 ) -> Any:
     def c(obj: Any, *args: Any, **kwargs: Any) -> Any:
+        obj._prefix = None
         obj._init_vars = cls._init_vars.copy()
         obj._cached = cls._cached.copy()
 
@@ -186,6 +181,7 @@ def pickler(cls_t: type[T]) -> type[T]:
     cls = cast(type[Any], cls_t)
 
     cls._parent = None
+    cls._prefix = None
     cls._store = None
     init_vars: dict[str, Any] = {}
     cls._init_vars = init_vars
