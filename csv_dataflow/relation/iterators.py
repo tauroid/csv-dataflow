@@ -20,15 +20,11 @@ def iter_relation_paths(
     match relation:
         case BasicRelation(source=source, target=target):
             if source is not None:
-                for path in source.iter_paths():
-                    yield RelationPath(
-                        "Source", (*source_prefix, *path)
-                    )
+                for path in source.iter_paths(source_prefix):
+                    yield RelationPath("Source", path)
             if target is not None:
-                for path in target.iter_paths():
-                    yield RelationPath(
-                        "Target", (*target_prefix, *path)
-                    )
+                for path in target.iter_paths(target_prefix):
+                    yield RelationPath("Target", path)
         case ParallelRelation(children=children):
             for child, between in children:
                 assert not isinstance(

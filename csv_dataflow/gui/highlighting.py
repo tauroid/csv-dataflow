@@ -114,6 +114,19 @@ def highlight_related_on_hover(
     source_prefix: SumProductPath[S] = (),
     target_prefix: SumProductPath[T] = (),
 ) -> str:
+    # FIXME I think we want to first of all have RelationPaths
+    #       from this, second they should only be leaves and all
+    #       visible children of leaves (children marked as
+    #       Subrelated)
+    #
+    #       Then it's lower down that the highlighted ids should
+    #       be made to also include prefixes so it's highlighted
+    #       up to the current node. Both subrelated and
+    #       "superrelated" should have different colours to show
+    #       they're not explicitly related (superrelated might
+    #       already be taken care of actually but the
+    #       implementation tackling everything will look
+    #       different (explicit css classes))
     relation_paths = filter(
         lambda p: len(p) > 1,
         chain.from_iterable(

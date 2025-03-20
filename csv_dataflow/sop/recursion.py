@@ -23,8 +23,8 @@ def max_de_bruijn_index_relative_to_current_node(
     """0 is the argument, 1 is node above, etc"""
 
     if not sop.children:
-        # This suits if the purpose is just to tell if the node doesn't
-        # refer outside itself
+        # This suits if the purpose is just to tell if the node
+        # doesn't refer outside itself
         return 0
 
     return max(
