@@ -7,8 +7,10 @@ from csv_dataflow.relation import (
     Relation,
     SeriesRelation,
 )
-from csv_dataflow.relation.recursion import assert_subpaths_if_recursive
-from csv_dataflow.sop import SumProductNode, SumProductPath, clip_sop
+from csv_dataflow.relation.recursion import (
+    assert_subpaths_if_recursive,
+)
+from csv_dataflow.sop import SumProductNode, SumProductPath
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -29,13 +31,13 @@ def clip_relation(
             assert source and target
             if clipped_source_prefix == source_prefix:
                 source_clip = source_clip.at(source_prefix)
-                source = clip_sop(source, source_clip)
+                source = source.clip(source_clip)
             else:
                 source = source_clip.at(clipped_source_prefix)
 
             if clipped_target_prefix == target_prefix:
                 target_clip = target_clip.at(target_prefix)
-                target = clip_sop(target, target_clip)
+                target = target.clip(target_clip)
             else:
                 target = target_clip.at(clipped_target_prefix)
 
@@ -73,12 +75,20 @@ def clip_relation(
                 )
                 for child, between in children
                 if assert_subpaths_if_recursive(child, between)
-                for between_source in ((*source_prefix, *between.source),)
-                for between_target in ((*target_prefix, *between.target),)
+                for between_source in (
+                    (*source_prefix, *between.source),
+                )
+                for between_target in (
+                    (*target_prefix, *between.target),
+                )
                 for clipped_between in (
                     Between[S, T](
-                        source_clip.clip_path(between_source)[len(source_prefix) :],
-                        target_clip.clip_path(between_target)[len(target_prefix) :],
+                        source_clip.clip_path(between_source)[
+                            len(source_prefix) :
+                        ],
+                        target_clip.clip_path(between_target)[
+                            len(target_prefix) :
+                        ],
                     ),
                 )
             )
@@ -88,16 +98,25 @@ def clip_relation(
                     (
                         child.children[0][0],
                         Between[S, T](
-                            (*between.source, *child.children[0][1].source),
-                            (*between.target, *child.children[0][1].target),
+                            (
+                                *between.source,
+                                *child.children[0][1].source,
+                            ),
+                            (
+                                *between.target,
+                                *child.children[0][1].target,
+                            ),
                         ),
                     )
-                    if isinstance(child, ParallelRelation) and len(child.children) == 1
+                    if isinstance(child, ParallelRelation)
+                    and len(child.children) == 1
                     else (child, between)
                 )
                 for child, between in children
             )
             # Remove dupes
-            return ParallelRelation(tuple({child: None for child in children}.keys()))
+            return ParallelRelation(
+                tuple({child: None for child in children}.keys())
+            )
         case SeriesRelation():
             raise NotImplementedError

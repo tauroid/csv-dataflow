@@ -9,7 +9,6 @@ from csv_dataflow.relation import (
     RelationPath,
     SeriesRelation,
 )
-from csv_dataflow.sop import select_from_paths
 
 
 S = TypeVar("S")
@@ -23,9 +22,14 @@ def filter_parallel_relation_child(
     relation, between = child
     for filter_path in filter_paths:
         between_path = (
-            between.source if filter_path.point == "Source" else between.target
+            between.source
+            if filter_path.point == "Source"
+            else between.target
         )
-        if between_path[: len(filter_path.sop_path)] == filter_path.sop_path:
+        if (
+            between_path[: len(filter_path.sop_path)]
+            == filter_path.sop_path
+        ):
             # Then it's entirely underneath the filter path so good
             return child
 
@@ -37,7 +41,9 @@ def filter_parallel_relation_child(
         tuple(
             relative_filter_path
             for filter_path in filter_paths
-            for relative_filter_path in (between.subtract_from(filter_path),)
+            for relative_filter_path in (
+                between.subtract_from(filter_path),
+            )
             if relative_filter_path is not None
         ),
     )
@@ -46,7 +52,8 @@ def filter_parallel_relation_child(
 
 
 def filter_relation(
-    relation: Relation[S, T], filter_paths: Collection[RelationPath[S, T]]
+    relation: Relation[S, T],
+    filter_paths: Collection[RelationPath[S, T]],
 ) -> Relation[S, T]:
     """
     Reduces to BasicRelations connecting something in the
@@ -59,21 +66,33 @@ def filter_relation(
             source_paths = tuple(
                 map(
                     lambda p: p.sop_path,
-                    filter(lambda p: p.point == "Source", filter_paths),
+                    filter(
+                        lambda p: p.point == "Source",
+                        filter_paths,
+                    ),
                 )
             )
 
-            if relation.source and select_from_paths(relation.source, source_paths):
+            if (
+                relation.source
+                and relation.source.filter_to_paths(source_paths)
+            ):
                 return relation
 
             target_paths = tuple(
                 map(
                     lambda p: p.sop_path,
-                    filter(lambda p: p.point == "Target", filter_paths),
+                    filter(
+                        lambda p: p.point == "Target",
+                        filter_paths,
+                    ),
                 )
             )
 
-            if relation.target and select_from_paths(relation.target, target_paths):
+            if (
+                relation.target
+                and relation.target.filter_to_paths(target_paths)
+            ):
                 return relation
 
             return BasicRelation[S, T](None, None)
@@ -85,7 +104,9 @@ def filter_relation(
                     filtered_child
                     for child in children
                     for filtered_child in (
-                        filter_parallel_relation_child(child, filter_paths),
+                        filter_parallel_relation_child(
+                            child, filter_paths
+                        ),
                     )
                 ),
             )

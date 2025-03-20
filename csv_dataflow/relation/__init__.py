@@ -20,14 +20,17 @@ S = TypeVar("S")
 T = TypeVar("T")
 
 type Relation[S, T] = (
-    BasicRelation[S, T] | ParallelRelation[S, T] | SeriesRelation[S, T]
+    BasicRelation[S, T]
+    | ParallelRelation[S, T]
+    | SeriesRelation[S, T]
 )
 
+
 @dataclass(frozen=True)
-class Triple[S,T]:
+class Triple[S, T]:
     source: SumProductNode[S]
     target: SumProductNode[T]
-    relation: Relation[S,T]
+    relation: Relation[S, T]
 
 
 class StageIndex(NewType[int]): ...
@@ -43,6 +46,10 @@ RelationPathElement = StageIndex | ParallelChildIndex
 class RelationPath(Generic[S, T]):
     point: Literal["Source", "Target"]
     sop_path: SumProductPath[Any]
+    Status = Literal[
+        "Unknown", "Unrelated", "Related", "Subrelated"
+    ]
+    status: Status = "Unknown"
     relation_prefix: tuple[RelationPathElement, ...] = ()
 
     @classmethod
@@ -55,11 +62,16 @@ class RelationPath(Generic[S, T]):
 
     @cache
     def flat(self) -> tuple[RelationPathElement | str, ...]:
-        return (*self.relation_prefix, self.point, *self.sop_path)
+        return (
+            *self.relation_prefix,
+            self.point,
+            *self.sop_path,
+        )
 
     @cache
     def to_str(self, separator: str = "/") -> str:
         return separator.join(map(str, self.flat()))
+
 
 @dataclass(frozen=True)
 class BasicRelation(Generic[S, T]):
@@ -89,7 +101,7 @@ class BasicRelation(Generic[S, T]):
 
 
 @dataclass(frozen=True)
-class Copy(Generic[S,T]):
+class Copy(Generic[S, T]):
     """
     Individually relates every leaf (and closure under "*" of
     leaves) under each leaf of `source`, in the full source type,
@@ -110,26 +122,38 @@ class Copy(Generic[S,T]):
     undefined (if we're even going to allow selecting not-leaves in
     BasicRelations)
     """
+
     source: SumProductNode[S] | None
     target: SumProductNode[T] | None
+
 
 @dataclass(frozen=True)
 class Between(Generic[S, T]):
     source: SumProductPath[S]
     target: SumProductPath[T]
 
-    def subtract_from(self, path: RelationPath[S, T]) -> RelationPath[S, T] | None:
-        prefix = self.source if path.point == "Source" else self.target
+    def subtract_from(
+        self, path: RelationPath[S, T]
+    ) -> RelationPath[S, T] | None:
+        prefix = (
+            self.source
+            if path.point == "Source"
+            else self.target
+        )
         prefix_len = len(prefix)
         if path.sop_path[:prefix_len] == prefix:
-            return replace(path, sop_path=path.sop_path[prefix_len:])
+            return replace(
+                path, sop_path=path.sop_path[prefix_len:]
+            )
         else:
             return None
 
 
 @dataclass(frozen=True)
 class ParallelRelation(Generic[S, T]):
-    children: tuple[tuple[Relation[Any, Any] | DeBruijn, Between[S, T]], ...]
+    children: tuple[
+        tuple[Relation[Any, Any] | DeBruijn, Between[S, T]], ...
+    ]
     """
     They are independently satisfiable, i.e. this is the union of the
     child relations plus any (s1 ∪ s2, t1 ∪ t2) for any (s1,t1), (s2,t2)
@@ -142,7 +166,9 @@ class ParallelRelation(Generic[S, T]):
 
 @dataclass(frozen=True)
 class SeriesRelation(Generic[S, T]):
-    stages: tuple[tuple[Relation[Any, Any], SumProductNode[Any]], ...]
+    stages: tuple[
+        tuple[Relation[Any, Any], SumProductNode[Any]], ...
+    ]
     last_stage: Relation[Any, T]
 
 

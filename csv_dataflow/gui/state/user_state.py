@@ -7,7 +7,7 @@ from csv_dataflow.gui.state.pickler import (
     pickler,
 )
 from csv_dataflow.relation import Relation, Triple
-from csv_dataflow.sop import SumProductNode, map_node_data
+from csv_dataflow.sop import SumProductNode
 
 
 S = TypeVar("S")
@@ -25,12 +25,8 @@ class SOPUserState(Generic[T]):
         # replace is expanding only the top level, all other
         # levels collapsed by default
         return cls(
-            replace(
-                map_node_data(lambda _: False, sop), data=True
-            ),
-            replace(
-                map_node_data(lambda _: False, sop), data=True
-            ),
+            replace(sop.map_data(lambda _: False), data=True),
+            replace(sop.map_data(lambda _: False), data=True),
         )
 
 

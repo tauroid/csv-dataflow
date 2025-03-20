@@ -1,4 +1,3 @@
-import inspect
 from pathlib import Path
 import time
 from typing import Any, MutableMapping, TypeVar, cast
@@ -9,7 +8,6 @@ from cachelib.file import FileSystemCache
 from pprint import pprint
 
 from csv_dataflow.gui.html.relation import (
-    relation_html,
     relation_page_html,
 )
 from csv_dataflow.gui.html.sop import sop_html
@@ -19,7 +17,6 @@ from csv_dataflow.gui.path_expansion import (
 from csv_dataflow.gui.state.pickler import attach_pickle_store
 from csv_dataflow.gui.state.triple import (
     TripleState,
-    VisibleTriple,
 )
 from examples.ex1.types import A, B
 

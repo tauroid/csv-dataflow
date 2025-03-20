@@ -1,9 +1,16 @@
 from typing import Iterator, TypeVar
-from csv_dataflow.relation import BasicRelation, ParallelRelation, Relation, RelationPath, SeriesRelation
-from csv_dataflow.sop import SumProductPath, iter_sop_paths
+from csv_dataflow.relation import (
+    BasicRelation,
+    ParallelRelation,
+    Relation,
+    RelationPath,
+    SeriesRelation,
+)
+from csv_dataflow.sop import SumProductPath
 
 S = TypeVar("S")
 T = TypeVar("T")
+
 
 def iter_relation_paths(
     relation: Relation[S, T],
@@ -13,11 +20,15 @@ def iter_relation_paths(
     match relation:
         case BasicRelation(source=source, target=target):
             if source is not None:
-                for path in iter_sop_paths(source):
-                    yield RelationPath("Source", (*source_prefix, *path))
+                for path in source.iter_paths():
+                    yield RelationPath(
+                        "Source", (*source_prefix, *path)
+                    )
             if target is not None:
-                for path in iter_sop_paths(target):
-                    yield RelationPath("Target", (*target_prefix, *path))
+                for path in target.iter_paths():
+                    yield RelationPath(
+                        "Target", (*target_prefix, *path)
+                    )
         case ParallelRelation(children=children):
             for child, between in children:
                 assert not isinstance(
@@ -33,7 +44,9 @@ def iter_relation_paths(
             raise NotImplementedError
 
 
-def iter_basic_relations(relation: Relation[S, T]) -> Iterator[BasicRelation[S, T]]:
+def iter_basic_relations(
+    relation: Relation[S, T],
+) -> Iterator[BasicRelation[S, T]]:
     match relation:
         case BasicRelation():
             yield relation

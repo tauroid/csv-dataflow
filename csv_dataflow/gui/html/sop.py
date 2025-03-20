@@ -1,7 +1,9 @@
 from dataclasses import replace
 import inspect
 from typing import Any, TypeVar
-from csv_dataflow.gui.highlighting import highlight_related_on_hover
+from csv_dataflow.gui.highlighting import (
+    highlight_related_on_hover,
+)
 from csv_dataflow.relation import Relation, RelationPath
 from csv_dataflow.relation.filtering import filter_relation
 from csv_dataflow.sop import DeBruijn, SumProductNode
@@ -21,7 +23,9 @@ def sop_html(
     path_id = f"{path.to_str(":")}"
 
     hover = (
-        highlight_related_on_hover(filtered_relation, full_relation)
+        highlight_related_on_hover(
+            filtered_relation, full_relation
+        )
         if path.sop_path
         else ""
     )
@@ -39,11 +43,17 @@ def sop_html(
             # Don't collapse the root
             hx_attrs = ""
         else:
-            hx_attrs = f'hx-delete="{expand_path}" hx-swap="outerHTML" hx-target="closest .{sop_class}"'
+            hx_attrs = (
+                f'hx-delete="{expand_path}"'
+                ' hx-swap="outerHTML"'
+                f' hx-target="closest .{sop_class}"'
+            )
 
         def iter_child_htmls():
             for child_label, child in sop.children.items():
-                child_path = replace(path, sop_path=(*path.sop_path, child_label))
+                child_path = replace(
+                    path, sop_path=(*path.sop_path, child_label)
+                )
                 filtered_relation_for_child = filter_relation(
                     filtered_relation, (child_path,)
                 )
@@ -59,10 +69,21 @@ def sop_html(
         return inspect.cleandoc(
             f"""
             <div class="{sop_class}">
-                <div id="{path_id}" _="{hover}" {hx_attrs}>{label}</div>
+                <div id="{path_id}" _="{hover}" {hx_attrs}>
+                    {label}
+                </div>
                 <div>{"".join(iter_child_htmls())}</div>
             </div>
             """
         )
     else:
-        return f"""<div id="{path_id}" _="{hover}" hx-put="{expand_path}" hx-swap="outerHTML">{label}</div>"""
+        return inspect.cleandoc(
+            f"""
+            <div id="{path_id}"
+                 _="{hover}"
+                 hx-put="{expand_path}"
+                 hx-swap="outerHTML">
+                {label}
+            </div>
+            """
+        )

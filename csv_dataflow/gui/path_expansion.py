@@ -6,7 +6,6 @@ from csv_dataflow.relation import Relation, RelationPath
 from csv_dataflow.sop import (
     SumProductNode,
     SumProductPath,
-    map_node_data,
 )
 
 
@@ -36,8 +35,8 @@ def set_session_point_path_expanded(
             child_path = (*path, child)
             expanded = expanded.replace_at(
                 child_path,
-                map_node_data(
-                    lambda _: False, expanded.at(child_path)
+                expanded.at(child_path).map_data(
+                    lambda _: False
                 ),
             )
 

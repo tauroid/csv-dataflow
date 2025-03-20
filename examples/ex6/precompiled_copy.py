@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from csv_dataflow.relation import Copy
-from csv_dataflow.sop import UNIT, SumProductNode, sop_from_type
+from csv_dataflow.sop import UNIT, SumProductNode
+from csv_dataflow.sop.from_type import sop_from_type
 
 
 @dataclass(frozen=True)
