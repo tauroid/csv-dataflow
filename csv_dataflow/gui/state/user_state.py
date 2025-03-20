@@ -1,5 +1,5 @@
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Generic, TypeVar
 
 from csv_dataflow.gui.state.pickler import (
@@ -22,9 +22,15 @@ class SOPUserState(Generic[T]):
 
     @classmethod
     def from_sop(cls, sop: SumProductNode[T]) -> SOPUserState[T]:
+        # replace is expanding only the top level, all other
+        # levels collapsed by default
         return cls(
-            map_node_data(lambda _: False, sop),
-            map_node_data(lambda _: False, sop),
+            replace(
+                map_node_data(lambda _: False, sop), data=True
+            ),
+            replace(
+                map_node_data(lambda _: False, sop), data=True
+            ),
         )
 
 

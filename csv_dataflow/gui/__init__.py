@@ -1,4 +1,3 @@
-from dataclasses import replace
 import inspect
 from pathlib import Path
 import time
@@ -9,7 +8,10 @@ from cachelib.file import FileSystemCache
 
 from pprint import pprint
 
-from csv_dataflow.gui.html.relation import relation_html
+from csv_dataflow.gui.html.relation import (
+    relation_html,
+    relation_page_html,
+)
 from csv_dataflow.gui.html.sop import sop_html
 from csv_dataflow.gui.path_expansion import (
     set_session_path_expanded,
@@ -57,51 +59,11 @@ def just_refresh(response: Response) -> Response:
 S = TypeVar("S")
 T = TypeVar("T")
 
-css = (Path(__file__).parent / "style.css").read_text()
-
-
-# v I don't actually know what this means, maybe future me v
-# v             can make some sense of it                  v
-# PLAN using relation and filtered_relation, compute the
-# smallest set of relation ids that unambiguously show which
-# relations are in filtered_relation
-#
-# so if all children recursively of some relation in `relation`
-# are also in `filtered_relation`, just give the id of that
-# top relation instead of all the children
-#
-# then highlighting that top relation will be sufficient
-
-
-def html(page_name: str, visible: VisibleTriple[S, T]) -> str:
-    """Args are only the parts to actually display on the page"""
-    return inspect.cleandoc(
-        f"""
-        <!doctype html>
-        <html>
-            <head>
-                <style>{css}</style>
-                <script src="https://unpkg.com/htmx.org@2.0.3"></script>
-                <script src="https://unpkg.com/hyperscript.org@0.9.13"></script>
-            </head>
-            <body>{relation_html(page_name, visible.source, visible.target, visible.relation)}</body>
-        </html>
-    """
-    )
-
 
 def relation_page(name: str, triple: Triple[S, T]) -> str:
     state = TripleState[S, T].from_triple(triple)
     attach_pickle_store(state, typed_session, name)
-    # Expand top level
-    state.user_state.source.expanded = replace(
-        state.user_state.source.expanded, data=True
-    )
-    state.user_state.target.expanded = replace(
-        state.user_state.target.expanded, data=True
-    )
-    state.recalculate_visible()
-    return html(name, state.visible)
+    return relation_page_html(name, state.visible)
 
 
 @app.route("/")
