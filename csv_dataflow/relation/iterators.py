@@ -1,9 +1,11 @@
 from typing import Iterator, TypeVar
 from csv_dataflow.relation import (
     BasicRelation,
+    ParallelChildIndex,
     ParallelRelation,
     Relation,
     RelationPath,
+    RelationPathElement,
     SeriesRelation,
 )
 from csv_dataflow.sop import SumProductPath
@@ -14,24 +16,38 @@ T = TypeVar("T")
 
 def iter_relation_paths(
     relation: Relation[S, T],
+    relation_prefix: tuple[RelationPathElement, ...] = (),
     source_prefix: SumProductPath[S] = (),
     target_prefix: SumProductPath[T] = (),
 ) -> Iterator[RelationPath[S, T]]:
     match relation:
         case BasicRelation(source=source, target=target):
             if source is not None:
-                for path in source.iter_paths(source_prefix):
-                    yield RelationPath("Source", path)
+                for path in source.iter_leaf_paths(
+                    source_prefix
+                ):
+                    yield RelationPath(
+                        "Source",
+                        path,
+                        relation_prefix=relation_prefix,
+                    )
             if target is not None:
-                for path in target.iter_paths(target_prefix):
-                    yield RelationPath("Target", path)
+                for path in target.iter_leaf_paths(
+                    target_prefix
+                ):
+                    yield RelationPath(
+                        "Target",
+                        path,
+                        relation_prefix=relation_prefix,
+                    )
         case ParallelRelation(children=children):
-            for child, between in children:
+            for i, (child, between) in enumerate(children):
                 assert not isinstance(
                     child, int
                 ), "Flat iterating over a recursive relation is probably a mistake"
                 for path in iter_relation_paths(
                     child,
+                    (*relation_prefix, ParallelChildIndex(i)),
                     (*source_prefix, *between.source),
                     (*target_prefix, *between.target),
                 ):

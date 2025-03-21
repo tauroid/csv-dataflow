@@ -1,5 +1,6 @@
+from dataclasses import replace
 from itertools import accumulate, chain, repeat
-from typing import TypeVar
+from typing import Iterator, TypeVar
 
 from csv_dataflow.sop import SumProductPath
 from ..relation import (
@@ -7,6 +8,7 @@ from ..relation import (
     ParallelChildIndex,
     ParallelRelation,
     Relation,
+    RelationPath,
     RelationPathElement,
     SeriesRelation,
 )
@@ -107,6 +109,17 @@ def relation_ids_to_highlight(
             raise NotImplementedError
 
 
+def get_subrelated_paths(
+    relation: Relation[S, T], path: RelationPath[S, T]
+) -> Iterator[RelationPath[S, T]]:
+    print(relation)
+    print(path)
+    path_iter = relation.at(path).iter_all_paths()
+    next(path_iter)  # Skip root
+    for sop_path in path_iter:
+        yield replace(path, sop_path=(*path.sop_path, *sop_path))
+
+
 def highlight_related_on_hover(
     filtered_relation: Relation[S, T],
     full_relation: Relation[S, T] | None = None,
@@ -127,12 +140,38 @@ def highlight_related_on_hover(
     #       already be taken care of actually but the
     #       implementation tackling everything will look
     #       different (explicit css classes))
+    #
+    # FIXME 2
+    #   You probably want to not use the prefixes in
+    #   iter_relation_paths, so we get true relative paths
+    #   out and can work with those (for getting subrelated
+    #   paths etc). Then put the prefixes on before using in ids
+    # relation_paths = tuple(
+    #     iter_relation_paths(
+    #         filtered_relation, (), source_prefix, target_prefix
+    #     )
+    # )
+    # related_ids = tuple(
+    #     f"#{":".join(map(str, path.flat()))}"
+    #     for path in relation_paths
+    # )
+    # subrelated_paths = tuple(
+    #     chain.from_iterable(
+    #         get_subrelated_paths(filtered_relation, path)
+    #         # No prefixes this time
+    #         for path in iter_relation_paths(filtered_relation)
+    #     )
+    # )
+    # subrelated_ids = tuple(
+    #     f"#{":".join(map(str, path.flat()))}"
+    #     for path in subrelated_paths
+    # )
     relation_paths = filter(
         lambda p: len(p) > 1,
         chain.from_iterable(
-            accumulate(map(lambda x: (x,), path.flat()))
+            accumulate(map(lambda x: (x,), replace(path, relation_prefix=()).flat()))
             for path in iter_relation_paths(
-                filtered_relation, source_prefix, target_prefix
+                filtered_relation, (), source_prefix, target_prefix
             )
         ),
     )
@@ -152,11 +191,16 @@ def highlight_related_on_hover(
             f"#{relation_id_from_path(relation_prefix)}",
         )
     return (
-        ("on mouseover"
-         " halt the event's bubbling"
-         " toggle .highlighted on"
-         f" [{",".join(chain(related_ids, relation_ids))}]"
-         " until mouseout")
+        (
+            "on mouseover"
+            " halt the event's bubbling"
+            " toggle .related on"
+            f"  [{",".join(chain(related_ids, relation_ids))}]"
+            "   until mouseout"
+            # " toggle .related1 on"
+            # f"  [{",".join(subrelated_ids)}]"
+            # "   until mouseout"
+        )
         if related_ids
         else ""
     )

@@ -9,7 +9,7 @@ T = TypeVar("T")
 Data = TypeVar("Data", default=None)
 
 
-def iterate(
+def iterate_leaves(
     sop: SumProductNode[T, Data], prefix: SumProductPath[T] = ()
 ) -> Iterator[SumProductPath[T]]:
     if not sop.children:
@@ -19,7 +19,7 @@ def iterate(
             assert not isinstance(
                 child, int
             ), "Flat iterating over a recursive type is probably a mistake"
-            for path in iterate(child, (*prefix, child_path)):
+            for path in iterate_leaves(child, (*prefix, child_path)):
                 yield path
 
 

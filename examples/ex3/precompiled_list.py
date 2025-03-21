@@ -1,15 +1,32 @@
 from frozendict import frozendict
-from csv_dataflow.sop import UNIT, SumProductChild, SumProductNode
-from csv_dataflow.relation import BasicRelation, Between, ParallelRelation
+from csv_dataflow.sop import (
+    UNIT,
+    SumProductChild,
+    SumProductNode,
+)
+from csv_dataflow.relation import (
+    BasicRelation,
+    Between,
+    ParallelRelation,
+)
 
 boolean = SumProductNode[bool](
-    "+", frozendict[str, SumProductChild]({"true": UNIT, "false": UNIT})
+    "+",
+    frozendict[str, SumProductChild](
+        {"true": UNIT, "false": UNIT}
+    ),
 )
 
 flip = ParallelRelation[bool, bool](
     (
-        (BasicRelation(UNIT, UNIT), Between(("true",), ("false",))),
-        (BasicRelation(UNIT, UNIT), Between(("false",), ("true",))),
+        (
+            BasicRelation(UNIT, UNIT),
+            Between(("true",), ("false",)),
+        ),
+        (
+            BasicRelation(UNIT, UNIT),
+            Between(("false",), ("true",)),
+        ),
     )
 )
 
@@ -19,7 +36,10 @@ sop = SumProductNode[list[bool]](
         {
             "empty": UNIT,
             "list": SumProductNode(
-                "*", frozendict[str, SumProductChild]({"head": boolean, "tail": 1})
+                "*",
+                frozendict[str, SumProductChild](
+                    {"head": boolean, "tail": 1}
+                ),
             ),
         }
     ),
@@ -27,8 +47,14 @@ sop = SumProductNode[list[bool]](
 
 relation = ParallelRelation[list[bool], list[bool]](
     (
-        (BasicRelation(UNIT, UNIT), Between(("empty",), ("empty",))),
+        (
+            BasicRelation(UNIT, UNIT),
+            Between(("empty",), ("empty",)),
+        ),
         (flip, Between(("list", "head"), ("list", "head"))),
-        (BasicRelation(sop, sop), Between(("list", "tail"), ("list", "tail"))),
+        (
+            BasicRelation(UNIT, UNIT),
+            Between(("list", "tail"), ("list", "tail")),
+        ),
     )
 )

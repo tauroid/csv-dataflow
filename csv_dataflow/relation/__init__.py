@@ -8,6 +8,7 @@ from typing import (
     TypeVar,
 )
 
+
 from ..newtype import NewType
 from ..sop import (
     SumProductNode,
@@ -99,6 +100,11 @@ class BasicRelation(Generic[S, T]):
     source: SumProductNode[S] | None
     target: SumProductNode[T] | None
 
+    def at(
+        self, path: RelationPath[S, T]
+    ) -> SumProductNode[Any]:
+        return at(self, path)
+
 
 @dataclass(frozen=True)
 class Copy(Generic[S, T]):
@@ -163,6 +169,11 @@ class ParallelRelation(Generic[S, T]):
     already satisfied)).
     """
 
+    def at(
+        self, path: RelationPath[S, T]
+    ) -> SumProductNode[Any]:
+        return at(self, path)
+
 
 @dataclass(frozen=True)
 class SeriesRelation(Generic[S, T]):
@@ -170,6 +181,14 @@ class SeriesRelation(Generic[S, T]):
         tuple[Relation[Any, Any], SumProductNode[Any]], ...
     ]
     last_stage: Relation[Any, T]
+
+    def at(
+        self, path: RelationPath[S, T]
+    ) -> SumProductNode[Any]:
+        return at(self, path)
+
+
+from csv_dataflow.relation.at import at
 
 
 # FIXME Then go straight to "what does this partially specified

@@ -90,10 +90,15 @@ class SumProductNode(Generic[T, Data]):
     ) -> SumProductPath[T]:
         return clip_path(self, path, path_prefix, prev_stack)
 
-    def iter_paths(
+    def iter_leaf_paths(
         self, prefix: SumProductPath[T] = ()
     ) -> Iterator[SumProductPath[T]]:
-        return iter_paths(self, prefix)
+        return iterate_leaves(self, prefix)
+
+    def iter_all_paths(
+        self, prefix: SumProductPath[T] = ()
+    ) -> Iterator[SumProductPath[T]]:
+        return iterate_every(self, prefix)
 
     def add_values_at_paths(
         self, paths: Collection[SumProductPath[T]]
@@ -161,7 +166,10 @@ from csv_dataflow.sop.clip import clip, clip_path
 from csv_dataflow.sop.from_type import sop_from_type
 from csv_dataflow.sop.merge import merge
 from csv_dataflow.sop.paths.add_values import add_values_at_paths
-from csv_dataflow.sop.paths.iterate import iterate as iter_paths
+from csv_dataflow.sop.paths.iterate import (
+    iterate_every,
+    iterate_leaves,
+)
 from csv_dataflow.sop.paths.filter_to import filter_to_paths
 from csv_dataflow.sop.recursion import (
     is_empty_recursion,

@@ -78,7 +78,7 @@ body {
 .product > div:first-child, .sum > div:first-child {
     background-color: #bbb;
 }
-.product > div.highlighted:first-child, .sum > div.highlighted:first-child {
+.product > div.related:first-child, .sum > div.highlighted:first-child {
     background-color: #a0b099 !important;
 }
 .product > div:last-child > .product > div:first-child,
@@ -86,8 +86,8 @@ body {
 {
     background-color: #eee;
 }
-.product > div:last-child > .product > div.highlighted:first-child,
-.product > div:last-child > .sum > div.highlighted:first-child
+.product > div:last-child > .product > div.related:first-child,
+.product > div:last-child > .sum > div.related:first-child
 {
     background-color: #dec !important;
 }
@@ -149,7 +149,7 @@ body > .sum {
     padding: 2px;
     height: 0px;
 }
-.highlighted {
+.related {
     background-color: #dfb !important;
 }
 .arrows {
@@ -179,7 +179,7 @@ body > .sum {
     border-radius: 5px;
     padding-bottom: 2px;
 }
-.arrows div.highlighted {
+.arrows div.related {
     background-color: #dfb !important;
     border: 2px solid black;
 }
