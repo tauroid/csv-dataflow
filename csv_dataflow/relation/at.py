@@ -51,27 +51,17 @@ def at(
 
     assert isinstance(relation, ParallelRelation)
 
-    child_index, *rest_of_prefix = path.relation_prefix
+    child_index, *_ = path.relation_prefix
     child, between = relation.children[child_index.value]
 
     # NOTE do this when you need it
     assert not isinstance(child, DeBruijn)
 
-    match path.point:
-        case "Source":
-            sop_prefix = between.source
-        case "Target":
-            sop_prefix = between.target
-
-    assert path.sop_path[: len(sop_prefix)] == sop_prefix
-
-    sop_path = path.sop_path[len(sop_prefix) :]
-
     return at(
         child,
         replace(
-            path,
-            sop_path=sop_path,
-            relation_prefix=rest_of_prefix,
+            path.subtract_prefixes(
+                (child_index,), between.source, between.target
+            )
         ),
     )

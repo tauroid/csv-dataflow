@@ -1,5 +1,5 @@
 from dataclasses import replace
-from itertools import accumulate, chain, repeat
+from itertools import chain, repeat
 from typing import Iterator, TypeVar
 
 from csv_dataflow.sop import SumProductPath
@@ -109,11 +109,14 @@ def relation_ids_to_highlight(
             raise NotImplementedError
 
 
+def sop_id_from_path(path: RelationPath[S, T]) -> str:
+    id_path = (path.point, *path.sop_path)
+    return f"#{':'.join(id_path)}"
+
+
 def get_subrelated_paths(
     relation: Relation[S, T], path: RelationPath[S, T]
 ) -> Iterator[RelationPath[S, T]]:
-    print(relation)
-    print(path)
     path_iter = relation.at(path).iter_all_paths()
     next(path_iter)  # Skip root
     for sop_path in path_iter:
@@ -140,45 +143,34 @@ def highlight_related_on_hover(
     #       already be taken care of actually but the
     #       implementation tackling everything will look
     #       different (explicit css classes))
-    #
-    # FIXME 2
-    #   You probably want to not use the prefixes in
-    #   iter_relation_paths, so we get true relative paths
-    #   out and can work with those (for getting subrelated
-    #   paths etc). Then put the prefixes on before using in ids
-    # relation_paths = tuple(
-    #     iter_relation_paths(
-    #         filtered_relation, (), source_prefix, target_prefix
-    #     )
-    # )
-    # related_ids = tuple(
-    #     f"#{":".join(map(str, path.flat()))}"
-    #     for path in relation_paths
-    # )
-    # subrelated_paths = tuple(
-    #     chain.from_iterable(
-    #         get_subrelated_paths(filtered_relation, path)
-    #         # No prefixes this time
-    #         for path in iter_relation_paths(filtered_relation)
-    #     )
-    # )
-    # subrelated_ids = tuple(
-    #     f"#{":".join(map(str, path.flat()))}"
-    #     for path in subrelated_paths
-    # )
-    relation_paths = filter(
-        lambda p: len(p) > 1,
-        chain.from_iterable(
-            accumulate(map(lambda x: (x,), replace(path, relation_prefix=()).flat()))
-            for path in iter_relation_paths(
-                filtered_relation, (), source_prefix, target_prefix
+    related_ids: set[str] = set()
+    subrelated_ids: set[str] = set()
+    for path in iter_relation_paths(filtered_relation):
+        absolute_path = path.add_prefixes(
+            relation_prefix, source_prefix, target_prefix
+        )
+        related_ids.add(sop_id_from_path(absolute_path))
+        # FIXME the issue I'm now having with subrelated paths is
+        #       they're not available from the relation. I need the
+        #       actual sops in here i.e. I need the triple
+        #
+        #       same for Copy so it is actually something worth doing
+        #
+        #       or maybe this is overloading this function a tad
+        #       and I should retreat to the sop html to do the extra
+        #       subrelation and copy stuff
+        for subrelated_path in get_subrelated_paths(
+            filtered_relation, path
+        ):
+            absolute_subrelated_path = subrelated_path.add_prefixes(
+                relation_prefix, source_prefix, target_prefix
             )
-        ),
-    )
-    related_ids = (
-        f"#{":".join(map(str, path))}"
-        for path in set(relation_paths)
-    )
+            subrelated_ids.add(
+                sop_id_from_path(absolute_subrelated_path)
+            )
+
+    assert not related_ids.intersection(subrelated_ids)
+
     relation_ids = relation_ids_to_highlight(
         filtered_relation, full_relation, relation_prefix
     )
@@ -195,11 +187,11 @@ def highlight_related_on_hover(
             "on mouseover"
             " halt the event's bubbling"
             " toggle .related on"
-            f"  [{",".join(chain(related_ids, relation_ids))}]"
-            "   until mouseout"
+            f" [{",".join(chain(related_ids, relation_ids))}]"
+            "  until mouseout"
             # " toggle .related1 on"
-            # f"  [{",".join(subrelated_ids)}]"
-            # "   until mouseout"
+            # f" [{",".join(subrelated_ids)}]"
+            # "  until mouseout"
         )
         if related_ids
         else ""

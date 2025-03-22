@@ -73,6 +73,56 @@ class RelationPath(Generic[S, T]):
     def to_str(self, separator: str = "/") -> str:
         return separator.join(map(str, self.flat()))
 
+    def add_prefixes(
+        self,
+        relation_prefix: tuple[RelationPathElement, ...] = (),
+        source_prefix: SumProductPath[S] = (),
+        target_prefix: SumProductPath[T] = (),
+    ) -> Self:
+        new_relation_prefix = (
+            *relation_prefix,
+            *self.relation_prefix,
+        )
+
+        match self.point:
+            case "Source":
+                sop_path = (*source_prefix, *self.sop_path)
+            case "Target":
+                sop_path = (*target_prefix, *self.sop_path)
+
+        return replace(
+            self,
+            relation_prefix=new_relation_prefix,
+            sop_path=sop_path,
+        )
+
+    def subtract_prefixes(
+        self,
+        relation_prefix: tuple[RelationPathElement, ...] = (),
+        source_prefix: SumProductPath[S] = (),
+        target_prefix: SumProductPath[T] = (),
+    ) -> Self:
+        assert (
+            self.relation_prefix[: len(relation_prefix)]
+            == relation_prefix
+        )
+
+        match self.point:
+            case "Source":
+                sop_prefix = source_prefix
+            case "Target":
+                sop_prefix = target_prefix
+
+        assert self.sop_path[: len(sop_prefix)] == sop_prefix
+
+        return replace(
+            self,
+            relation_prefix=self.relation_prefix[
+                len(relation_prefix) :
+            ],
+            sop_path=self.sop_path[len(sop_prefix) :],
+        )
+
 
 @dataclass(frozen=True)
 class BasicRelation(Generic[S, T]):
