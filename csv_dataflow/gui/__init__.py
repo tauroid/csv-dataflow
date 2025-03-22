@@ -10,7 +10,7 @@ from pprint import pprint
 from csv_dataflow.gui.html.relation import (
     relation_page_html,
 )
-from csv_dataflow.gui.html.sop import sop_html
+from csv_dataflow.gui.html.sop import sop_div
 from csv_dataflow.gui.path_expansion import (
     set_session_path_expanded,
 )
@@ -146,7 +146,7 @@ def expand(page_name: str, str_path: str) -> str:
     sop, relation = set_session_path_expanded(
         typed_session, page_name, path, True
     )
-    return sop_html(page_name, sop, path, relation)
+    return sop_div(page_name, sop, path, relation)
 
 
 @app.route(
@@ -158,4 +158,4 @@ def collapse(page_name: str, str_path: str) -> str:
         typed_session, page_name, path, False
     )
 
-    return sop_html(page_name, sop, path, relation)
+    return sop_div(page_name, sop, path, relation)

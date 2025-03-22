@@ -12,7 +12,7 @@ S = TypeVar("S")
 T = TypeVar("T")
 
 
-def sop_html(
+def sop_div(
     page_name: str,
     sop: SumProductNode[Any, bool] | DeBruijn,
     path: RelationPath[S, T],
@@ -57,7 +57,7 @@ def sop_html(
                 filtered_relation_for_child = filter_relation(
                     filtered_relation, (child_path,)
                 )
-                yield sop_html(
+                yield sop_div(
                     page_name,
                     child,
                     child_path,

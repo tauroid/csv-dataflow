@@ -3,7 +3,7 @@ from itertools import chain, islice
 from pathlib import Path
 from typing import TypeVar
 from csv_dataflow.gui.html.arrows import arrows_html
-from csv_dataflow.gui.html.sop import sop_html
+from csv_dataflow.gui.html.sop import sop_div
 from csv_dataflow.gui.state.triple import VisibleTriple
 from csv_dataflow.relation import (
     BasicRelation,
@@ -27,14 +27,14 @@ def relation_html(
     match relation:
         case BasicRelation() | ParallelRelation():
             sop_htmls = (
-                sop_html(
+                sop_div(
                     page_name,
                     source,
                     RelationPath("Source", ()),
                     relation,
                     relation,
                 ),
-                sop_html(
+                sop_div(
                     page_name,
                     target,
                     RelationPath("Target", ()),
