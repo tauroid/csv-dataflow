@@ -22,7 +22,7 @@ def sop_div(
     expand_path = f"{page_name}/expanded/{path.to_str()}"
     path_id = f"{path.to_str(":")}"
 
-    hover = (
+    highlight_related = (
         highlight_related_on_hover(
             filtered_relation, full_relation
         )
@@ -69,7 +69,7 @@ def sop_div(
         return inspect.cleandoc(
             f"""
             <div class="{sop_class}">
-                <div id="{path_id}" _="{hover}" {hx_attrs}>
+                <div id="{path_id}" _="{highlight_related}" {hx_attrs}>
                     {label}
                 </div>
                 <div>{"".join(iter_child_htmls())}</div>
@@ -80,7 +80,7 @@ def sop_div(
         return inspect.cleandoc(
             f"""
             <div id="{path_id}"
-                 _="{hover}"
+                 _="{highlight_related}"
                  hx-put="{expand_path}"
                  hx-swap="outerHTML">
                 {label}
