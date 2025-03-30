@@ -14,6 +14,7 @@ from csv_dataflow.sop import SumProductNode
 
 S = TypeVar("S")
 T = TypeVar("T")
+Data = TypeVar("Data")
 
 
 def path_relation_mismatch_msg(cls_name: str) -> str:
@@ -26,8 +27,8 @@ def path_relation_mismatch_msg(cls_name: str) -> str:
 
 
 def at(
-    relation: Relation[S, T], path: RelationPath[S, T]
-) -> SumProductNode[Any]:
+    relation: Relation[S, T, Data], path: RelationPath[S, T, Any]
+) -> SumProductNode[Any, Data]:
     if not path.relation_prefix:
         match relation:
             case BasicRelation(source, target):

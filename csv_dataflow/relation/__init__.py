@@ -2,7 +2,6 @@ from dataclasses import dataclass, replace
 from functools import cache
 from typing import (
     Any,
-    Generic,
     Literal,
     Self,
     TypeVar,
@@ -20,18 +19,18 @@ DeBruijn = int
 S = TypeVar("S")
 T = TypeVar("T")
 
-type Relation[S, T] = (
-    BasicRelation[S, T]
-    | ParallelRelation[S, T]
-    | SeriesRelation[S, T]
+type Relation[S, T, Data = None] = (
+    BasicRelation[S, T, Data]
+    | ParallelRelation[S, T, Data]
+    | SeriesRelation[S, T, Data]
 )
 
 
 @dataclass(frozen=True)
-class Triple[S, T]:
-    source: SumProductNode[S]
-    target: SumProductNode[T]
-    relation: Relation[S, T]
+class Triple[S, T, Data = None]:
+    source: SumProductNode[S, Data]
+    target: SumProductNode[T, Data]
+    relation: Relation[S, T, Data]
 
 
 class StageIndex(NewType[int]): ...
@@ -44,13 +43,9 @@ RelationPathElement = StageIndex | ParallelChildIndex
 
 
 @dataclass(frozen=True)
-class RelationPath(Generic[S, T]):
+class RelationPath[S, T, Data = None]:
     point: Literal["Source", "Target"]
     sop_path: SumProductPath[Any]
-    Status = Literal[
-        "Unknown", "Unrelated", "Related", "Subrelated"
-    ]
-    status: Status = "Unknown"
     relation_prefix: tuple[RelationPathElement, ...] = ()
 
     @classmethod
@@ -125,7 +120,7 @@ class RelationPath(Generic[S, T]):
 
 
 @dataclass(frozen=True)
-class BasicRelation(Generic[S, T]):
+class BasicRelation[S, T, Data = None]:
     """
     This is a binary relation, between all path groupings that
     "fill" the source or target path sets in the sense that for a
@@ -147,17 +142,17 @@ class BasicRelation(Generic[S, T]):
     classes
     """
 
-    source: SumProductNode[S] | None
-    target: SumProductNode[T] | None
+    source: SumProductNode[S, Data] | None
+    target: SumProductNode[T, Data] | None
 
     def at(
-        self, path: RelationPath[S, T]
-    ) -> SumProductNode[Any]:
+        self, path: RelationPath[S, T, Data]
+    ) -> SumProductNode[Any, Data]:
         return at(self, path)
 
 
 @dataclass(frozen=True)
-class Copy(Generic[S, T]):
+class Copy[S, T, Data = None]:
     """
     Individually relates every leaf (and closure under "*" of
     leaves) under each leaf of `source`, in the full source type,
@@ -179,12 +174,12 @@ class Copy(Generic[S, T]):
     BasicRelations)
     """
 
-    source: SumProductNode[S] | None
-    target: SumProductNode[T] | None
+    source: SumProductNode[S, Data] | None
+    target: SumProductNode[T, Data] | None
 
 
 @dataclass(frozen=True)
-class Between(Generic[S, T]):
+class Between[S, T]:
     source: SumProductPath[S]
     target: SumProductPath[T]
 
@@ -206,9 +201,12 @@ class Between(Generic[S, T]):
 
 
 @dataclass(frozen=True)
-class ParallelRelation(Generic[S, T]):
+class ParallelRelation[S, T, Data = None]:
     children: tuple[
-        tuple[Relation[Any, Any] | DeBruijn, Between[S, T]], ...
+        tuple[
+            Relation[Any, Any, Data] | DeBruijn, Between[S, T]
+        ],
+        ...,
     ]
     """
     They are independently satisfiable, i.e. this is the union of the
@@ -220,21 +218,24 @@ class ParallelRelation(Generic[S, T]):
     """
 
     def at(
-        self, path: RelationPath[S, T]
-    ) -> SumProductNode[Any]:
+        self, path: RelationPath[S, T, Data]
+    ) -> SumProductNode[Any, Data]:
         return at(self, path)
 
 
 @dataclass(frozen=True)
-class SeriesRelation(Generic[S, T]):
+class SeriesRelation[S, T, Data = None]:
     stages: tuple[
-        tuple[Relation[Any, Any], SumProductNode[Any]], ...
+        tuple[
+            Relation[Any, Any, Data], SumProductNode[Any, Data]
+        ],
+        ...,
     ]
-    last_stage: Relation[Any, T]
+    last_stage: Relation[Any, T, Data]
 
     def at(
-        self, path: RelationPath[S, T]
-    ) -> SumProductNode[Any]:
+        self, path: RelationPath[S, T, Data]
+    ) -> SumProductNode[Any, Data]:
         return at(self, path)
 
 
