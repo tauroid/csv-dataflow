@@ -5,7 +5,7 @@ from csv_dataflow.relation import (
     ParallelRelation,
     Relation,
     RelationPath,
-    RelationPathElement,
+    RelationPrefix,
     SeriesRelation,
 )
 from csv_dataflow.sop import SumProductPath
@@ -16,7 +16,7 @@ T = TypeVar("T")
 
 def iter_relation_paths(
     relation: Relation[S, T],
-    relation_prefix: tuple[RelationPathElement, ...] = (),
+    relation_prefix: RelationPrefix = (),
     source_prefix: SumProductPath[S] = (),
     target_prefix: SumProductPath[T] = (),
 ) -> Iterator[RelationPath[S, T]]:

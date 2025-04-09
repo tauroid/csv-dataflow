@@ -9,7 +9,7 @@ from ..relation import (
     ParallelRelation,
     Relation,
     RelationPath,
-    RelationPathElement,
+    RelationPrefix,
     SeriesRelation,
 )
 from ..relation.iterators import iter_relation_paths
@@ -21,7 +21,7 @@ T = TypeVar("T")
 
 
 def relation_id_from_path(
-    path: tuple[RelationPathElement, ...],
+    path: RelationPrefix,
 ) -> str:
     return f"rel_:{":".join(map(str, path))}"
 
@@ -29,7 +29,7 @@ def relation_id_from_path(
 def relation_ids_to_highlight(
     filtered_relation: Relation[S, T],
     full_relation: Relation[S, T] | None = None,
-    prefix: tuple[RelationPathElement, ...] = (),
+    prefix: RelationPrefix = (),
 ) -> tuple[str, ...] | None:
     """
     None means no discrepancy yet between filtered_relation and
@@ -126,7 +126,7 @@ def get_subrelated_paths(
 def highlight_related_on_hover(
     filtered_relation: Relation[S, T],
     full_relation: Relation[S, T] | None = None,
-    relation_prefix: tuple[RelationPathElement, ...] = (),
+    relation_prefix: RelationPrefix = (),
     source_prefix: SumProductPath[S] = (),
     target_prefix: SumProductPath[T] = (),
 ) -> str:
