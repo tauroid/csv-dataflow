@@ -18,7 +18,9 @@ T = TypeVar("T")
 
 
 def mark_up_visible_triple(
-    selection: Triple[S, T], visible: Triple[S, T]
+    selection: Triple[S, T],
+    visible: Triple[S, T],
+    prefiltered_visible_relation: Relation[S, T] | None = None,
 ) -> Triple[S, T, State]:
     # FIXME
     # Derive filtered relations from selection
