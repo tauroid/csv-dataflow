@@ -9,7 +9,7 @@ from csv_dataflow.relation import (
     ParallelChildIndex,
     ParallelRelation,
     Relation,
-    RelationPathElement,
+    RelationPrefix,
 )
 from csv_dataflow.sop import SumProductPath
 
@@ -20,7 +20,7 @@ T = TypeVar("T")
 
 def arrows_div(
     relation: Relation[S, T],
-    relation_prefix: tuple[RelationPathElement, ...] = (),
+    relation_prefix: RelationPrefix = (),
     source_prefix: SumProductPath[S] = (),
     target_prefix: SumProductPath[T] = (),
 ) -> str:

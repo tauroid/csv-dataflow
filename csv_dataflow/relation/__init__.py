@@ -4,6 +4,7 @@ from typing import (
     Any,
     Literal,
     Self,
+    Sequence,
     TypeVar,
 )
 
@@ -25,14 +26,6 @@ type Relation[S, T, Data = None] = (
     | SeriesRelation[S, T, Data]
 )
 
-
-@dataclass(frozen=True)
-class Triple[S, T, Data = None]:
-    source: SumProductNode[S, Data]
-    target: SumProductNode[T, Data]
-    relation: Relation[S, T, Data]
-
-
 class StageIndex(NewType[int]): ...
 
 
@@ -40,13 +33,39 @@ class ParallelChildIndex(NewType[int]): ...
 
 
 RelationPathElement = StageIndex | ParallelChildIndex
+RelationPrefix = tuple[RelationPathElement, ...]
+
+@dataclass(frozen=True)
+class TripleNodeData[Data]:
+    relations: Sequence[RelationPrefix]
+    """
+    Paths into the triple's relation
+
+    Corresponds to all BasicRelations that include the node
+    """
+    data: Data
+
+@dataclass(frozen=True)
+class Triple[S, T, Data = None]:
+    raw_source: SumProductNode[S, Data]
+    raw_target: SumProductNode[T, Data]
+    relation: Relation[S, T, Data]
+
+    @property
+    @cache
+    def source(self) -> SumProductNode[S, TripleNodeData[Data]]: ...
+
+    @property
+    @cache
+    def target(self) -> SumProductNode[S, TripleNodeData[Data]]: ...
+
 
 
 @dataclass(frozen=True)
 class RelationPath[S, T, Data = None]:
     point: Literal["Source", "Target"]
     sop_path: SumProductPath[Any]
-    relation_prefix: tuple[RelationPathElement, ...] = ()
+    relation_prefix: RelationPrefix = ()
 
     @classmethod
     def from_str(cls, s: str) -> Self:
@@ -70,7 +89,7 @@ class RelationPath[S, T, Data = None]:
 
     def add_prefixes(
         self,
-        relation_prefix: tuple[RelationPathElement, ...] = (),
+        relation_prefix: RelationPrefix = (),
         source_prefix: SumProductPath[S] = (),
         target_prefix: SumProductPath[T] = (),
     ) -> Self:
@@ -93,7 +112,7 @@ class RelationPath[S, T, Data = None]:
 
     def subtract_prefixes(
         self,
-        relation_prefix: tuple[RelationPathElement, ...] = (),
+        relation_prefix: RelationPrefix = (),
         source_prefix: SumProductPath[S] = (),
         target_prefix: SumProductPath[T] = (),
     ) -> Self:
