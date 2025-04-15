@@ -94,7 +94,8 @@ class HighlightingContext[S, T]:
     related_parent_info: (
         BasicContext[S, T] | CopyContext[S, T] | None
     )
-    relation_filtered_to_node_children: Relation[S, T]
+    relation_filtered_to_node_children: Relation[S, T, bool]
+    """bool is whether it's still full"""
 
 
 def refine_highlighting_context[S, T, N](
@@ -112,6 +113,11 @@ def node_highlighting[S, T, N](
     context: HighlightingContext[S, T],
     has_related_children: SumProductNode[N, bool],
 ) -> Collection[tuple[RelationPath[S, T], Highlighting]]:
+    """
+    Just highlighting a relation without Selected etc is a
+    commonality to this that I should do first
+    """
+
     match context.related_parent_info:
         case None:
             """
