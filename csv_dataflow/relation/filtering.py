@@ -16,9 +16,9 @@ T = TypeVar("T")
 
 
 def filter_parallel_relation_child(
-    child: tuple[Relation[S, T] | DeBruijn, Between[S, T]],
+    child: tuple[Relation[S, T, bool] | DeBruijn, Between[S, T]],
     filter_paths: Collection[RelationPath[S, T]],
-) -> tuple[Relation[S, T] | DeBruijn, Between[S, T]]:
+) -> tuple[Relation[S, T, bool] | DeBruijn, Between[S, T]]:
     relation, between = child
     for filter_path in filter_paths:
         between_path = (
@@ -31,7 +31,7 @@ def filter_parallel_relation_child(
             == filter_path.sop_path
         ):
             # Then it's entirely underneath the filter path so good
-            return child
+            return relation, between
 
     if isinstance(relation, int):
         return relation, between
@@ -52,17 +52,22 @@ def filter_parallel_relation_child(
 
 
 def filter_relation(
-    relation: Relation[S, T],
+    relation: Relation[S, T, bool],
     filter_paths: Collection[RelationPath[S, T]],
-) -> Relation[S, T]:
+) -> Relation[S, T, bool]:
     """
     Reduces to BasicRelations connecting something in the
     subtree of at least one of the input paths
 
+    The data bool is True if none of the children
+    (recursively) had anything filtered, False if something
+    was filtered
+
     TODO not using Between properly yet
+
     """
     match relation:
-        case BasicRelation():
+        case BasicRelation(source, target):
             source_paths = tuple(
                 map(
                     lambda p: p.sop_path,
@@ -73,10 +78,7 @@ def filter_relation(
                 )
             )
 
-            if (
-                relation.source
-                and relation.source.filter_to_paths(source_paths)
-            ):
+            if source and source.filter_to_paths(source_paths):
                 return relation
 
             target_paths = tuple(
@@ -89,29 +91,34 @@ def filter_relation(
                 )
             )
 
-            if (
-                relation.target
-                and relation.target.filter_to_paths(target_paths)
-            ):
+            if target and target.filter_to_paths(target_paths):
                 return relation
 
-            return BasicRelation[S, T](None, None)
+            return BasicRelation[S, T, bool](None, None, False)
 
         case ParallelRelation(children=children):
-            filtered_relation = replace(
-                relation,
-                children=tuple(
-                    filtered_child
-                    for child in children
-                    for filtered_child in (
-                        filter_parallel_relation_child(
-                            child, filter_paths
-                        ),
-                    )
-                ),
+            filtered_children = tuple(
+                filtered_child
+                for child in children
+                for filtered_child in (
+                    filter_parallel_relation_child(
+                        child, filter_paths
+                    ),
+                )
             )
 
-            return filtered_relation
+            return replace(
+                relation,
+                children=filtered_children,
+                data=all(
+                    (
+                        child.data
+                        if not isinstance(child, DeBruijn)
+                        else True
+                    )
+                    for child, _ in filtered_children
+                ),
+            )
 
         case SeriesRelation():
             raise NotImplementedError

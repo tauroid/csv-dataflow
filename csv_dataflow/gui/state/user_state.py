@@ -46,7 +46,7 @@ class TripleUserState(Generic[S, T]):
         cls, triple: Triple[S, T]
     ) -> TripleUserState[S, T]:
         return cls(
-            SOPUserState[S].from_sop(triple.raw_source),
-            SOPUserState[T].from_sop(triple.raw_target),
+            SOPUserState[S].from_sop(triple.source),
+            SOPUserState[T].from_sop(triple.target),
             triple.relation,
         )

@@ -3,7 +3,7 @@ from itertools import chain, repeat
 from typing import Iterator, TypeVar
 
 from csv_dataflow.sop import SumProductPath
-from ..relation import (
+from ...relation import (
     BasicRelation,
     ParallelChildIndex,
     ParallelRelation,
@@ -12,9 +12,9 @@ from ..relation import (
     RelationPrefix,
     SeriesRelation,
 )
-from ..relation.iterators import iter_relation_paths
+from ...relation.iterators import iter_relation_paths
 
-from .asserts import assert_isinstance, assert_true
+from ..asserts import assert_isinstance, assert_true
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -162,8 +162,10 @@ def highlight_related_on_hover(
         for subrelated_path in get_subrelated_paths(
             filtered_relation, path
         ):
-            absolute_subrelated_path = subrelated_path.add_prefixes(
-                relation_prefix, source_prefix, target_prefix
+            absolute_subrelated_path = (
+                subrelated_path.add_prefixes(
+                    relation_prefix, source_prefix, target_prefix
+                )
             )
             subrelated_ids.add(
                 sop_id_from_path(absolute_subrelated_path)

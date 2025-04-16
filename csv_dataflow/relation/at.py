@@ -27,7 +27,7 @@ def path_relation_mismatch_msg(cls_name: str) -> str:
 
 
 def at(
-    relation: Relation[S, T, Data], path: RelationPath[S, T, Any]
+    relation: Relation[S, T, Data], path: RelationPath[S, T]
 ) -> SumProductNode[Any, Data]:
     if not path.relation_prefix:
         match relation:

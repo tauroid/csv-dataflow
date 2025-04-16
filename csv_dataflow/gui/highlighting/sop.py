@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import Any, Callable, Collection, Iterable, Literal
 
@@ -8,6 +8,7 @@ from csv_dataflow.relation import (
     Relation,
     RelationPath,
 )
+from csv_dataflow.relation.filtering import filter_relation
 from csv_dataflow.sop import SumProductNode, SumProductPath
 
 
@@ -34,7 +35,7 @@ Highlighting = Literal[
     "CopySelected",
     "SubCopy",
     "SubCopySelected",
-    "SubSubCopy"
+    "SubSubCopy",
 ]
 
 
@@ -90,29 +91,42 @@ def traverse[N, K, Ct, Cd, I, R](
 
 @dataclass(frozen=True)
 class HighlightingContext[S, T]:
-    prefix: SumProductPath[Any]
+    path: RelationPath[S, T]
     related_parent_info: (
         BasicContext[S, T] | CopyContext[S, T] | None
     )
-    relation_filtered_to_node_children: Relation[S, T, bool]
+    relation_filtered_to_node: Relation[S, T, bool]
     """bool is whether it's still full"""
 
 
 def refine_highlighting_context[S, T, N](
-    context: HighlightingContext[S, T], key: str, node: SumProductNode[N]
+    context: HighlightingContext[S, T],
+    key: str,
+    node: SumProductNode[N],
 ) -> HighlightingContext[S, T]:
     """
-    If we go into a related prefix, set related_parent_info to it
+    If we go into a related path, set related_parent_info to it
 
-    Add key to prefix, filter relation more
+    Add key to path, filter relation more
     """
+    path = replace(
+        context.path, sop_path=(*context.path.sop_path, key)
+    )
+    # If path in relation (explicitly), set related_parent_info to
+    # the BasicRelations and/or Copys with the path
+    # So basically iterate over the relation and accumulate the ones
+    # with the path
+    # (need an iterator over (relation, paths at path.point))
+    relation_filtered_to_node = filter_relation(
+        context.relation_filtered_to_node, (path,)
+    )
 
 
 # Doesn't do traversal of sop, takes results of traversal and gives highlighted paths
-def node_highlighting[S, T, N](
+def highlighting_from_node_mouseover[S, T, N](
     context: HighlightingContext[S, T],
     has_related_children: SumProductNode[N, bool],
-) -> Collection[tuple[RelationPath[S, T], Highlighting]]:
+) -> set[tuple[RelationPath[S, T], Highlighting]]:
     """
     Just highlighting a relation without Selected etc is a
     commonality to this that I should do first
