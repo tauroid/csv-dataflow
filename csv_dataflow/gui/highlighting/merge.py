@@ -5,6 +5,7 @@ from csv_dataflow.gui.highlighting.modes import Highlighting
 from csv_dataflow.relation import RelationPath
 
 
+# This could have a more generic type
 def merge_path_highlights[S, T](
     highlight_mappings: Iterable[
         Mapping[RelationPath[S, T], set[Highlighting]]
