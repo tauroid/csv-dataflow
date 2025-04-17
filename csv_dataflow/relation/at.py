@@ -60,9 +60,7 @@ def at(
 
     return at(
         child,
-        replace(
-            path.subtract_prefixes(
-                (child_index,), between.source, between.target
-            )
+        path.subtract_prefixes(
+            (child_index,), between.source, between.target
         ),
     )

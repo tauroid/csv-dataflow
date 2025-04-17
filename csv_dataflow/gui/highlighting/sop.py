@@ -1,12 +1,20 @@
 from dataclasses import dataclass, replace
-from functools import partial
-from typing import Any, Callable, Collection, Iterable, Literal
+from typing import (
+    Any,
+    Callable,
+    Collection,
+    Iterable,
+    Literal,
+    Mapping,
+)
 
+from csv_dataflow.gui.highlighting.modes import Highlighting
 from csv_dataflow.relation import (
     BasicRelation,
     Copy,
     Relation,
     RelationPath,
+    Triple,
 )
 from csv_dataflow.relation.filtering import filter_relation
 from csv_dataflow.sop import SumProductNode, SumProductPath
@@ -21,22 +29,6 @@ class BasicContext[S, T]:
 class CopyContext[S, T]:
     relation: Copy[S, T]
     subpath: SumProductPath[Any]
-
-
-Highlighting = Literal[
-    "BareSelected",
-    "Related",
-    "RelatedSelected",
-    "SubRelated",
-    "SubRelatedSelected",
-    "HasRelatedChildren",
-    "Copy",
-    "ChildIsCopySelected",
-    "CopySelected",
-    "SubCopy",
-    "SubCopySelected",
-    "SubSubCopy",
-]
 
 
 # Can I have some kind of generic traversal function that takes
@@ -92,10 +84,10 @@ def traverse[N, K, Ct, Cd, I, R](
 @dataclass(frozen=True)
 class HighlightingContext[S, T]:
     path: RelationPath[S, T]
-    related_parent_info: (
-        BasicContext[S, T] | CopyContext[S, T] | None
-    )
-    relation_filtered_to_node: Relation[S, T, bool]
+    related_parent_info: Collection[
+        BasicContext[S, T] | CopyContext[S, T]
+    ]
+    triple_filtered_to_node: Triple[S, T, bool]
     """bool is whether it's still full"""
 
 
@@ -112,13 +104,16 @@ def refine_highlighting_context[S, T, N](
     path = replace(
         context.path, sop_path=(*context.path.sop_path, key)
     )
-    # If path in relation (explicitly), set related_parent_info to
-    # the BasicRelations and/or Copys with the path
-    # So basically iterate over the relation and accumulate the ones
-    # with the path
+    # If path in relation (explicitly), set related_parent_info
+    # to the BasicRelations and/or Copys with the path
+    # So basically iterate over the relation and accumulate the
+    # ones with the path
     # (need an iterator over (relation, paths at path.point))
-    relation_filtered_to_node = filter_relation(
-        context.relation_filtered_to_node, (path,)
+    triple_filtered_to_node = replace(
+        context.triple_filtered_to_node,
+        relation=filter_relation(
+            context.triple_filtered_to_node.relation, (path,)
+        ),
     )
 
 
@@ -126,7 +121,7 @@ def refine_highlighting_context[S, T, N](
 def highlighting_from_node_mouseover[S, T, N](
     context: HighlightingContext[S, T],
     has_related_children: SumProductNode[N, bool],
-) -> set[tuple[RelationPath[S, T], Highlighting]]:
+) -> Mapping[RelationPath[S, T], Highlighting]:
     """
     Just highlighting a relation without Selected etc is a
     commonality to this that I should do first

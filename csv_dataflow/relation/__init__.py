@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass, replace
 from functools import cache
 from typing import (
@@ -22,6 +23,7 @@ T = TypeVar("T")
 
 type Relation[S, T, Data = None] = (
     BasicRelation[S, T, Data]
+    | Copy[S, T, Data]
     | ParallelRelation[S, T, Data]
     | SeriesRelation[S, T, Data]
 )
@@ -43,10 +45,39 @@ class Triple[S, T, Data = None]:
     target: SumProductNode[T, Data]
     relation: Relation[S, T, Data]
 
+    source_prefix: SumProductPath[S] = ()
+    target_prefix: SumProductPath[T] = ()
+    relation_prefix: RelationPrefix = ()
+
+    def at_parallel_child(
+        self, parallel_child_index: ParallelChildIndex
+    ) -> Triple[Any, Any, Data]:
+        if not isinstance(self.relation, ParallelRelation):
+            raise ValueError(
+                "Must only call this function on a Triple of"
+                " a ParallelRelation"
+            )
+        child, between = self.relation.children[
+            parallel_child_index.value
+        ]
+
+        if isinstance(child, DeBruijn):
+            # Probably could do this I guess
+            raise NotImplementedError
+
+        return Triple[Any, Any, Data](
+            self.source.at(between.source),
+            self.target.at(between.target),
+            child,
+            self.source_prefix + between.source,
+            self.target_prefix + between.target,
+            self.relation_prefix + (parallel_child_index,),
+        )
+
 
 @dataclass(frozen=True)
 class RelationPath[S, T]:
-    point: Literal["Source", "Target"]
+    point: Literal["Source", "Target"] | None
     sop_path: SumProductPath[Any]
     relation_prefix: RelationPrefix = ()
 
