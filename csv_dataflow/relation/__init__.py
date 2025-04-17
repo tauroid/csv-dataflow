@@ -57,6 +57,7 @@ class Triple[S, T, Data = None]:
                 "Must only call this function on a Triple of"
                 " a ParallelRelation"
             )
+
         child, between = self.relation.children[
             parallel_child_index.value
         ]

@@ -26,7 +26,7 @@ def highlight_leaf_relation_point(
     triple: Triple[Any, Any, bool],
     sop_prefix: SumProductPath[Any],
     relation_prefix: RelationPrefix,
-) -> Mapping[RelationPath[Any, Any], Highlighting]:
+) -> Mapping[RelationPath[Any, Any], set[Highlighting]]:
     assert isinstance(
         triple.relation, BasicRelation
     ) or isinstance(triple.relation, Copy)
@@ -40,21 +40,21 @@ def highlight_leaf_relation_point(
             sub_highlight = "SubCopy"
 
     highlight_mappings: list[
-        dict[RelationPath[Any, Any], Highlighting]
+        dict[RelationPath[Any, Any], set[Highlighting]]
     ] = []
 
     for sop_path in sop.iter_leaf_paths(sop_prefix):
         path = RelationPath[Any, Any](
             point, sop_path, relation_prefix
         )
-        highlight_mappings.append({path: highlight})
+        highlight_mappings.append({path: {highlight}})
         highlight_mappings.append(
             {
                 RelationPath(
                     point,
                     subpath,
                     relation_prefix,
-                ): sub_highlight
+                ): {sub_highlight}
                 for subpath in triple.source.at(
                     path.subtract_prefixes(
                         source_prefix=sop_path
@@ -68,7 +68,7 @@ def highlight_leaf_relation_point(
 
 def highlight_leaf_relation[S, T](
     triple: Triple[S, T, bool], parent_is_full: bool = False
-) -> Mapping[RelationPath[S, T], Highlighting]:
+) -> Mapping[RelationPath[S, T], set[Highlighting]]:
     relation = triple.relation
 
     assert isinstance(relation, BasicRelation) or isinstance(
@@ -76,7 +76,7 @@ def highlight_leaf_relation[S, T](
     )
 
     highlight_mappings: list[
-        Mapping[RelationPath[S, T], Highlighting]
+        Mapping[RelationPath[S, T], set[Highlighting]]
     ] = []
 
     if not parent_is_full:
@@ -88,9 +88,9 @@ def highlight_leaf_relation[S, T](
 
         highlight_mappings.append(
             {
-                RelationPath(
-                    None, (), triple.relation_prefix
-                ): highlight
+                RelationPath(None, (), triple.relation_prefix): {
+                    highlight
+                }
             }
         )
 
@@ -122,7 +122,7 @@ def highlight_leaf_relation[S, T](
 def highlight_triple[S, T](
     triple: Triple[S, T, bool],
     parent_is_full: bool = False,
-) -> Mapping[RelationPath[S, T], Highlighting]:
+) -> Mapping[RelationPath[S, T], set[Highlighting]]:
     """
     Args:
       relation:
@@ -140,6 +140,7 @@ def highlight_triple[S, T](
         case ParallelRelation(children, full):
             if not parent_is_full and full:
                 """
+                Still TODO FIXME
                 Relation path as Related, or Copy if all children
                 are Copy (just recurse here to find out)
                 """
