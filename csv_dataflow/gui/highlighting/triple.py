@@ -8,6 +8,7 @@ from csv_dataflow.relation import (
     Copy,
     ParallelChildIndex,
     ParallelRelation,
+    Relation,
     RelationPath,
     RelationPrefix,
     SeriesRelation,
@@ -20,17 +21,13 @@ from csv_dataflow.sop import (
 )
 
 
-def highlight_leaf_relation_point(
+def highlight_leaf_triple_point(
     point: Literal["Source", "Target"],
     sop: SumProductNode[Any, bool],
     triple: Triple[Any, Any, bool],
     sop_prefix: SumProductPath[Any],
     relation_prefix: RelationPrefix,
 ) -> Mapping[RelationPath[Any, Any], set[Highlighting]]:
-    assert isinstance(
-        triple.relation, BasicRelation
-    ) or isinstance(triple.relation, Copy)
-
     match triple.relation:
         case BasicRelation():
             highlight = "Related"
@@ -38,6 +35,8 @@ def highlight_leaf_relation_point(
         case Copy():
             highlight = "Copy"
             sub_highlight = "SubCopy"
+        case _:
+            assert False
 
     highlight_mappings: list[
         dict[RelationPath[Any, Any], set[Highlighting]]
@@ -66,26 +65,24 @@ def highlight_leaf_relation_point(
     return merge_path_highlights(highlight_mappings)
 
 
-def highlight_leaf_relation[S, T](
+def highlight_leaf_triple[S, T](
     triple: Triple[S, T, bool], parent_is_full: bool = False
 ) -> Mapping[RelationPath[S, T], set[Highlighting]]:
     relation = triple.relation
 
-    assert isinstance(relation, BasicRelation) or isinstance(
-        relation, Copy
-    )
+    match relation:
+        case BasicRelation():
+            highlight = "Related"
+        case Copy():
+            highlight = "Copy"
+        case _:
+            assert False
 
     highlight_mappings: list[
         Mapping[RelationPath[S, T], set[Highlighting]]
     ] = []
 
     if not parent_is_full:
-        match relation:
-            case BasicRelation():
-                highlight = "Related"
-            case Copy():
-                highlight = "Copy"
-
         highlight_mappings.append(
             {
                 RelationPath(None, (), triple.relation_prefix): {
@@ -96,7 +93,7 @@ def highlight_leaf_relation[S, T](
 
     if relation.source:
         highlight_mappings.append(
-            highlight_leaf_relation_point(
+            highlight_leaf_triple_point(
                 "Source",
                 relation.source,
                 triple,
@@ -107,7 +104,7 @@ def highlight_leaf_relation[S, T](
 
     if relation.target:
         highlight_mappings.append(
-            highlight_leaf_relation_point(
+            highlight_leaf_triple_point(
                 "Target",
                 relation.target,
                 triple,
@@ -115,6 +112,63 @@ def highlight_leaf_relation[S, T](
                 triple.relation_prefix,
             )
         )
+
+    return merge_path_highlights(highlight_mappings)
+
+
+def is_only_copy[S, T](relation: Relation[S, T, bool]) -> bool:
+    match relation:
+        case BasicRelation():
+            return False
+        case Copy():
+            return True
+        case ParallelRelation(children):
+            return all(
+                is_only_copy(child)
+                for child, _ in children
+                if not isinstance(child, DeBruijn)
+            )
+        case SeriesRelation():
+            raise NotImplementedError
+
+
+def highlight_parallel_triple[S, T](
+    triple: Triple[S, T, bool],
+    parent_is_full: bool = False,
+) -> Mapping[RelationPath[S, T], set[Highlighting]]:
+    match triple.relation:
+        case ParallelRelation(children, full):
+            ...
+        case _:
+            assert False
+
+    highlight_mappings: list[
+        Mapping[RelationPath[S, T], set[Highlighting]]
+    ] = []
+    if not parent_is_full and full:
+        highlight_mappings.append(
+            {
+                RelationPath(None, (), triple.relation_prefix): {
+                    (
+                        "Copy"
+                        if is_only_copy(triple.relation)
+                        else "Related"
+                    )
+                }
+            }
+        )
+
+    if parent_is_full:
+        assert full
+
+    highlight_mappings.extend(
+        highlight_triple(
+            triple.at_parallel_child(ParallelChildIndex(i)),
+            full,
+        )
+        for i, (child, _) in enumerate(children)
+        if not isinstance(child, DeBruijn)
+    )
 
     return merge_path_highlights(highlight_mappings)
 
@@ -134,33 +188,10 @@ def highlight_triple[S, T](
     """
     match triple.relation:
         case BasicRelation() | Copy():
-            return highlight_leaf_relation(
+            return highlight_leaf_triple(triple, parent_is_full)
+        case ParallelRelation():
+            return highlight_parallel_triple(
                 triple, parent_is_full
-            )
-        case ParallelRelation(children, full):
-            if not parent_is_full and full:
-                """
-                Still TODO FIXME
-                Relation path as Related, or Copy if all children
-                are Copy (just recurse here to find out)
-                """
-            if parent_is_full:
-                assert full
-            return merge_path_highlights(
-                (
-                    # {
-                    #     RelationPath(
-                    #         None, (), relation_prefix
-                    #     ): this_node_if_newly_full
-                    # },
-                    highlight_triple(
-                        triple.at_parallel_child(
-                            ParallelChildIndex(i)
-                        )
-                    )
-                    for i, (child, _) in enumerate(children)
-                    if not isinstance(child, DeBruijn)
-                )
             )
         case SeriesRelation():
             raise NotImplementedError

@@ -1,21 +1,20 @@
 from typing import Iterator, TypeVar
 from csv_dataflow.relation import (
     BasicRelation,
+    DeBruijn,
     ParallelChildIndex,
     ParallelRelation,
     Relation,
     RelationPath,
     RelationPrefix,
     SeriesRelation,
+    Triple,
 )
 from csv_dataflow.sop import SumProductPath
 
-S = TypeVar("S")
-T = TypeVar("T")
 
-
-def iter_relation_paths(
-    relation: Relation[S, T],
+def iter_relation_paths[S, T, Data](
+    relation: Relation[S, T, Data],
     relation_prefix: RelationPrefix = (),
     source_prefix: SumProductPath[S] = (),
     target_prefix: SumProductPath[T] = (),
@@ -56,18 +55,22 @@ def iter_relation_paths(
             raise NotImplementedError
 
 
-def iter_basic_relations(
-    relation: Relation[S, T],
-) -> Iterator[BasicRelation[S, T]]:
-    match relation:
+def iter_basic_triples[S, T, Data](
+    triple: Triple[S, T, Data],
+) -> Iterator[Triple[S, T, Data]]:
+    match triple.relation:
         case BasicRelation():
-            yield relation
-        case ParallelRelation(children=children):
-            for child, _ in children:
+            yield triple
+        case ParallelRelation(children):
+            for i, (child, _) in enumerate(children):
                 assert not isinstance(
-                    child, int
+                    child, DeBruijn
                 ), "Flat iterating over a recursive relation is probably a mistake"
-                for descendant in iter_basic_relations(child):
+                for descendant in iter_basic_triples(
+                    triple.at_parallel_child(
+                        ParallelChildIndex(i)
+                    )
+                ):
                     yield descendant
         case SeriesRelation():
             raise NotImplementedError
