@@ -13,8 +13,8 @@ from csv_dataflow.relation import (
     BasicRelation,
     Between,
     ParallelRelation,
-    Triple,
 )
+from csv_dataflow.relation.triple import ParallelTriple
 from csv_dataflow.sop import UNIT
 
 from .match import Match
@@ -68,10 +68,8 @@ class Function:
 
     @property
     @cache
-    def as_triple(self) -> Triple[Any, Any]:
-        return Triple(
-            self.arg_type.as_sop,
-            self.return_type.as_sop,
+    def as_triple(self) -> ParallelTriple[Any, Any]:
+        return ParallelTriple(
             ParallelRelation(
                 tuple(
                     (
@@ -84,4 +82,6 @@ class Function:
                     for branch in self.body.branches
                 )
             ),
+            source=self.arg_type.as_sop,
+            target=self.return_type.as_sop,
         )

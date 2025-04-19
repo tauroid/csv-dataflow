@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Generic, Self, TypeVar
+from typing import Self
 
 from csv_dataflow.gui.state.pickler import (
     field_pickler,
@@ -8,17 +8,15 @@ from csv_dataflow.gui.state.pickler import (
 )
 from csv_dataflow.gui.state.user_state import TripleUserState
 from csv_dataflow.gui.visibility import compute_visible_sop
-from csv_dataflow.relation import Relation, Triple
+from csv_dataflow.relation import Relation
 from csv_dataflow.relation.clipping import clip_relation
+from csv_dataflow.relation.triple import Triple
 from csv_dataflow.sop import SumProductNode
-
-S = TypeVar("S")
-T = TypeVar("T")
 
 
 @pickler
 @dataclass
-class VisibleTriple(Generic[S, T]):
+class VisibleTriple[S, T]:
     source: SumProductNode[S, bool] = field_pickler()
     target: SumProductNode[T, bool] = field_pickler()
     relation: Relation[S, T] = field_pickler()
@@ -50,21 +48,19 @@ class VisibleTriple(Generic[S, T]):
 
 @pickler
 @dataclass
-class TripleState(Generic[S, T]):
+class TripleState[S, T]:
     user_state: TripleUserState[S, T]
     visible: VisibleTriple[S, T]
 
     @classmethod
     def uninitialised(cls) -> Self:
         return cls(
-            TripleUserState[S,T].uninitialised(),
-            VisibleTriple()
+            TripleUserState[S, T].uninitialised(),
+            VisibleTriple(),
         )
 
     @classmethod
-    def from_triple(
-        cls, triple: Triple[S, T]
-    ) -> Self:
+    def from_triple(cls, triple: Triple[S, T]) -> Self:
         user_state = TripleUserState[S, T].from_triple(triple)
         return cls(
             user_state,

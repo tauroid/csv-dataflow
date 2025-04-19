@@ -7,33 +7,42 @@ from typing import (
     Mapping,
 )
 
-from csv_dataflow.cons import ConsList
+from csv_dataflow.cons import (
+    Cons,
+    ConsList,
+    iter_cons_list,
+    to_cons_list,
+)
 from csv_dataflow.gui.highlighting.modes import Highlighting
 from csv_dataflow.relation import (
     BasicRelation,
     Copy,
     RelationPath,
-    Triple,
 )
 from csv_dataflow.relation.filtering import filter_relation
 from csv_dataflow.relation.iterators import (
     iter_basic_triples,
 )
-from csv_dataflow.sop import SumProductNode, SumProductPath
+from csv_dataflow.relation.triple import (
+    BasicTriple,
+    CopyTriple,
+    Triple,
+)
+from csv_dataflow.sop import (
+    SOPPathElement,
+    SumProductNode,
+)
 
 
 @dataclass(frozen=True)
 class BasicContext[S, T]:
-    # FIXME Make triple versions of all the relations
-    #       Then at_parallel_child can be less silly and types can
-    #       get more precise in a bunch of places
-    relation: BasicTriple[S, T]
+    relation: BasicTriple[S, T, bool]
 
 
 @dataclass(frozen=True)
 class CopyContext[S, T]:
-    relation: CopyTriple[S, T]
-    subpath: SumProductPath[Any]
+    relation: CopyTriple[S, T, bool]
+    subpath: ConsList[SOPPathElement]
 
 
 # Can I have some kind of generic traversal function that takes
@@ -96,42 +105,14 @@ class HighlightingContext[S, T]:
     ] = None
 
 
-def refine_highlighting_context[S, T, N](
-    context: HighlightingContext[S, T],
-    key: str,
-    node: SumProductNode[N],
-) -> HighlightingContext[S, T]:
-    """
-    If we go into a related path, set related_parent_info to it
-
-    Add key to path, filter relation more
-    """
-    path = replace(
-        context.path, sop_path=(*context.path.sop_path, key)
-    )
-    triple_filtered_to_node = replace(
-        context.triple_filtered_to_node,
-        relation=filter_relation(
-            context.triple_filtered_to_node.relation, (path,)
-        ),
-    )
-    # If path in relation (explicitly), set related_parent_info
-    # to the BasicRelations and/or Copys with the path
-    # So basically iterate over the relation and accumulate the
-    # ones with the path
-    # (need an iterator over (relation, paths at path.point))
-    # (or just iter_basic_relations but for triples using Betweens
-    # properly) (generally just switch iterator.py to triples)
-    related_parent_info: Collection[
+def get_node_related_parent_info[S, T](
+    path: RelationPath[S, T],
+    triple_filtered_to_node: Triple[S, T, bool],
+) -> Collection[BasicContext[S, T] | CopyContext[S, T]]:
+    node_related_parent_info: Collection[
         BasicContext[S, T] | CopyContext[S, T]
     ] = []
     for triple in iter_basic_triples(triple_filtered_to_node):
-        match triple.relation:
-            case BasicRelation() | Copy():
-                ...
-            case _:
-                assert False
-
         match path.point:
             case "Source":
                 related = triple.relation.source
@@ -142,14 +123,90 @@ def refine_highlighting_context[S, T, N](
             case _:
                 assert False
 
-        if related and path.sop_path in related.iter_leaf_paths(
-            prefix
+        if related and (
+            path.sop_path in related.iter_leaf_paths(prefix)
         ):
-            match triple.relation:
-                case BasicRelation():
-                    related_parent_info.append(
-                        BasicContext(triple.relation)
+            match triple:
+                case BasicTriple():
+                    node_related_parent_info.append(
+                        BasicContext(triple)
                     )
+                case CopyTriple():
+                    node_related_parent_info.append(
+                        CopyContext(triple, None)
+                    )
+
+    return tuple(node_related_parent_info)
+
+
+def extend_subpath[S, T](
+    parent_context: BasicContext[S, T] | CopyContext[S, T],
+    key: str,
+) -> BasicContext[S, T] | CopyContext[S, T]:
+    match parent_context:
+        case BasicContext():
+            return parent_context
+        case CopyContext(triple, subpath):
+            return CopyContext(triple, Cons(key, subpath))
+
+
+def refine_related_parent_info[S, T](
+    context: HighlightingContext[S, T], key: str
+) -> ConsList[
+    Collection[BasicContext[S, T] | CopyContext[S, T]]
+]:
+    """
+    `context` has `path` and `triple_filtered_to_node` refined,
+    but `related_parent_info` still not refined
+    """
+    related_parent_info = to_cons_list(
+        tuple(extend_subpath(pc, key) for pc in pcs)
+        for pcs in iter_cons_list(context.related_parent_info)
+    )
+
+    if node_related_parent_info := get_node_related_parent_info(
+        context.path, context.triple_filtered_to_node
+    ):
+        related_parent_info = Cons(
+            node_related_parent_info, related_parent_info
+        )
+
+    return related_parent_info
+
+
+def refine_highlighting_context[S, T, N](
+    context: HighlightingContext[S, T],
+    key: str,
+    _: SumProductNode[N],
+) -> HighlightingContext[S, T]:
+    """
+    If we go into a related path, set related_parent_info to it
+
+    Add key to path, filter relation more
+    """
+    path = replace(
+        context.path, sop_path=(*context.path.sop_path, key)
+    )
+
+    triple_filtered_to_node = replace(
+        context.triple_filtered_to_node,
+        relation=filter_relation(
+            context.triple_filtered_to_node.relation, (path,)
+        ),
+    )
+
+    related_parent_info = refine_related_parent_info(
+        replace(
+            context,
+            path=path,
+            triple_filtered_to_node=triple_filtered_to_node,
+        ),
+        key,
+    )
+
+    return HighlightingContext(
+        path, triple_filtered_to_node, related_parent_info
+    )
 
 
 # Doesn't do traversal of sop, takes results of traversal and gives highlighted paths

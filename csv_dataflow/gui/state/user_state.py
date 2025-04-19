@@ -1,22 +1,18 @@
 from __future__ import annotations
 from dataclasses import dataclass, replace
-from typing import Generic, TypeVar
 
 from csv_dataflow.gui.state.pickler import (
     field_pickler,
     pickler,
 )
-from csv_dataflow.relation import Relation, Triple
+from csv_dataflow.relation import Relation
+from csv_dataflow.relation.triple import Triple
 from csv_dataflow.sop import SumProductNode
-
-
-S = TypeVar("S")
-T = TypeVar("T")
 
 
 @pickler
 @dataclass
-class SOPUserState(Generic[T]):
+class SOPUserState[T]:
     selected: SumProductNode[T, bool] = field_pickler()
     expanded: SumProductNode[T, bool] = field_pickler()
 
@@ -32,7 +28,7 @@ class SOPUserState(Generic[T]):
 
 @pickler
 @dataclass
-class TripleUserState(Generic[S, T]):
+class TripleUserState[S, T]:
     source: SOPUserState[S]
     target: SOPUserState[T]
     relation: Relation[S, T] = field_pickler()

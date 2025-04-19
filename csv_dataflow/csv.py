@@ -3,8 +3,8 @@ from dataclasses import replace
 from frozendict import frozendict
 from itertools import repeat
 from pathlib import Path
-from typing import TypeVar
 
+from csv_dataflow.relation.triple import ParallelTriple, Triple
 from csv_dataflow.sop.from_type import sop_from_type
 
 from .cons import Cons, ConsList, at_index
@@ -12,18 +12,14 @@ from .relation import (
     BasicRelation,
     Between,
     ParallelRelation,
-    Triple,
 )
 from .sop import (
     SumProductChild,
     SumProductNode,
 )
 
-S = TypeVar("S")
-T = TypeVar("T")
 
-
-def select_given_csv_paths(
+def select_given_csv_paths[T](
     sop: SumProductNode[T],
     name_paths: tuple[tuple[str, ...], ...],
     immediate_name_paths: tuple[tuple[str, ...], ...] = (),
@@ -121,7 +117,7 @@ def csv_name_to_name_path(csv_name: str) -> tuple[str, ...]:
     return tuple(map(str.strip, csv_name.split("/")))
 
 
-def parallel_relation_from_csv(
+def parallel_relation_from_csv[S, T](
     s: type[S], t: type[T], csv_path: Path
 ) -> Triple[S, T]:
     sop_s = sop_from_type(s)
@@ -197,10 +193,10 @@ def parallel_relation_from_csv(
     )
     assert not isinstance(sop_t_with_all_values, int)
 
-    return Triple(
-        sop_s_with_all_values,
-        sop_t_with_all_values,
+    return ParallelTriple(
         ParallelRelation(
             tuple(zip(relations, repeat(Between[S, T]((), ()))))
         ),
+        source=sop_s_with_all_values,
+        target=sop_t_with_all_values,
     )

@@ -27,7 +27,8 @@ Data = TypeVar("Data", default=None)
 OtherData = TypeVar("OtherData")
 
 
-type SumProductPath[T] = tuple[str, ...]
+type SOPPathElement = str
+type SumProductPath[T] = tuple[SOPPathElement, ...]
 
 type SumProductChild[Data = None] = SumProductNode[
     Any, Data

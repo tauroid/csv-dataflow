@@ -7,7 +7,7 @@ from typing import Callable, Generic, TypeVar, cast
 
 from .ast_to_relation import asts_equal
 from .ast_to_relation.simple_ast.function import Function
-from .relation import Triple
+from .relation.triple import ParallelTriple
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -37,7 +37,7 @@ class DecomposedFunction(Generic[S, T]):
 
     @property
     @cache
-    def as_triple(self) -> Triple[S,T]:
+    def as_triple(self) -> ParallelTriple[S, T]:
         return self.simple_ast.as_triple
 
 

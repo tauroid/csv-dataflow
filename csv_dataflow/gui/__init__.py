@@ -18,13 +18,14 @@ from csv_dataflow.gui.state.pickler import attach_pickle_store
 from csv_dataflow.gui.state.triple import (
     TripleState,
 )
+from csv_dataflow.relation.triple import (
+    Triple,
+    relation_to_triple,
+)
 from examples.ex1.types import A, B
 
 from ..csv import parallel_relation_from_csv
-from ..relation import (
-    RelationPath,
-    Triple,
-)
+from ..relation import RelationPath
 
 typed_session = cast(MutableMapping[str, bytes], session)
 
@@ -121,14 +122,19 @@ def example_1_name_to_option() -> str:
 def example_3() -> str:
     from examples.ex3.precompiled_list import sop, relation
 
-    return relation_page("ex3", Triple(sop, sop, relation))
+    return relation_page(
+        "ex3",
+        relation_to_triple(relation, sop, sop),
+    )
 
 
 @app.route("/ex4")
 def example_4() -> str:
     from examples.ex4.mapflip import sop, relation
 
-    return relation_page("ex4", Triple(sop, sop, relation))
+    return relation_page(
+        "ex4", relation_to_triple(relation, sop, sop)
+    )
 
 
 @app.route("/ex5")
