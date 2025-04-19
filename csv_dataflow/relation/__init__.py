@@ -65,6 +65,14 @@ class RelationPath[S, T]:
     def to_str(self, separator: str = "/") -> str:
         return separator.join(map(str, self.flat()))
 
+    @property
+    @cache
+    def as_url_path(self) -> str: ...
+
+    @property
+    @cache
+    def as_id(self) -> str: ...
+
     def add_prefixes(
         self,
         relation_prefix: RelationPrefix = (),

@@ -34,7 +34,7 @@ class HighlightingContext[S, T]:
     path: RelationPath[S, T]
     triple_filtered_to_node: Triple[S, T, bool]
     """bool is whether it's still full"""
-    related_parent_info: ConsList[
+    relations_from_root: ConsList[
         Collection[BasicContext[S, T] | CopyContext[S, T]]
     ] = None
 
@@ -98,9 +98,12 @@ def refine_related_parent_info[S, T](
             context.path, context.triple_filtered_to_node
         ),
         to_cons_list(
-            tuple(extend_subpath(pc, key) for pc in pcs)
-            for pcs in iter_cons_list(
-                context.related_parent_info
+            tuple(
+                extend_subpath(relation_context, key)
+                for relation_context in relations
+            )
+            for relations in iter_cons_list(
+                context.relations_from_root
             )
         ),
     )

@@ -2,7 +2,7 @@ from typing import Any, Literal, Mapping
 from csv_dataflow.gui.highlighting.merge import (
     merge_path_highlights,
 )
-from csv_dataflow.gui.highlighting.sop import Highlighting
+from csv_dataflow.gui.highlighting.modes import Highlighting
 from csv_dataflow.relation import (
     BasicRelation,
     Copy,
@@ -12,6 +12,12 @@ from csv_dataflow.relation import (
     RelationPath,
     RelationPrefix,
     SeriesRelation,
+)
+from csv_dataflow.relation.triple import (
+    BasicTriple,
+    CopyTriple,
+    ParallelTriple,
+    SeriesTriple,
     Triple,
 )
 from csv_dataflow.sop import (
@@ -133,14 +139,10 @@ def is_only_copy[S, T](relation: Relation[S, T, bool]) -> bool:
 
 
 def highlight_parallel_triple[S, T](
-    triple: Triple[S, T, bool],
+    triple: ParallelTriple[S, T, bool],
     parent_is_full: bool = False,
 ) -> Mapping[RelationPath[S, T], set[Highlighting]]:
-    match triple.relation:
-        case ParallelRelation(children, full):
-            ...
-        case _:
-            assert False
+    full = triple.relation.data
 
     highlight_mappings: list[
         Mapping[RelationPath[S, T], set[Highlighting]]
@@ -163,10 +165,10 @@ def highlight_parallel_triple[S, T](
 
     highlight_mappings.extend(
         highlight_triple(
-            triple.at_parallel_child(ParallelChildIndex(i)),
+            triple.at_child(ParallelChildIndex(i)),
             full,
         )
-        for i, (child, _) in enumerate(children)
+        for i, (child, _) in enumerate(triple.relation.children)
         if not isinstance(child, DeBruijn)
     )
 
@@ -186,12 +188,12 @@ def highlight_triple[S, T](
         If some are missing, we can't just light up that node's
         arrow, we have to progress to its children.
     """
-    match triple.relation:
-        case BasicRelation() | Copy():
+    match triple:
+        case BasicTriple() | CopyTriple():
             return highlight_leaf_triple(triple, parent_is_full)
-        case ParallelRelation():
+        case ParallelTriple():
             return highlight_parallel_triple(
                 triple, parent_is_full
             )
-        case SeriesRelation():
+        case SeriesTriple():
             raise NotImplementedError
