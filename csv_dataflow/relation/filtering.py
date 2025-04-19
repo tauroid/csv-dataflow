@@ -3,6 +3,7 @@ from typing import Collection, TypeVar
 from csv_dataflow.relation import (
     BasicRelation,
     Between,
+    Copy,
     DeBruijn,
     ParallelRelation,
     Relation,
@@ -62,12 +63,11 @@ def filter_relation(
     The data bool is True if none of the children
     (recursively) had anything filtered, False if something
     was filtered
-
-    TODO not using Between properly yet
-
     """
     match relation:
-        case BasicRelation(source, target):
+        case BasicRelation(source, target) | Copy(
+            source, target
+        ):
             source_paths = tuple(
                 map(
                     lambda p: p.sop_path,
