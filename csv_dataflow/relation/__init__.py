@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, replace
 from functools import cache
+from itertools import chain
 from typing import (
     Any,
     Literal,
@@ -67,11 +68,18 @@ class RelationPath[S, T]:
 
     @property
     @cache
-    def as_url_path(self) -> str: ...
+    def as_url_path(self) -> str:
+        return "/".join(map(str, self.flat()))
 
     @property
     @cache
-    def as_id(self) -> str: ...
+    def as_id(self) -> str:
+        if self.sop_path:
+            assert self.point
+            return ":".join(chain(self.point, *self.sop_path))
+        else:
+            assert not self.point
+            return ":".join(map(str, self.relation_prefix))
 
     def add_prefixes(
         self,

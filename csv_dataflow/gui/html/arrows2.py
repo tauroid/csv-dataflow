@@ -1,4 +1,6 @@
+from dataclasses import replace
 import inspect
+from typing import cast
 from csv_dataflow.gui.asserts import assert_isinstance
 from csv_dataflow.gui.highlighting.hyperscript import hyperscript
 from csv_dataflow.gui.highlighting.triple import highlight_triple
@@ -6,9 +8,9 @@ from csv_dataflow.relation import (
     DeBruijn,
     ParallelChildIndex,
     ParallelRelation,
-    Relation,
     RelationPath,
 )
+from csv_dataflow.relation.map import map_relation_data
 from csv_dataflow.relation.triple import (
     BasicTriple,
     CopyTriple,
@@ -46,5 +48,14 @@ def arrows_div[S, T](triple: Triple[S, T, bool]) -> str:
     )
 
 
-def arrows_html[S, T](visible: Relation[S, T]) -> str:
-    return f'<div class="arrows">{arrows_div(visible)}</div>'
+def arrows_html[S, T](visible: Triple[S, T]) -> str:
+    visible_full = cast(
+        Triple[S, T, bool],
+        replace(
+            visible,
+            relation=map_relation_data(
+                lambda _: True, visible.relation
+            ),
+        ),
+    )
+    return f'<div class="arrows">{visible_full}</div>'
