@@ -30,24 +30,29 @@ from csv_dataflow.sop import (
 def highlight_leaf_triple_point(
     point: Literal["Source", "Target"],
     sop: SumProductNode[Any, bool],
-    triple: Triple[Any, Any, bool],
+    triple: (
+        BasicTriple[Any, Any, bool] | CopyTriple[Any, Any, bool]
+    ),
     sop_prefix: SumProductPath[Any],
     relation_prefix: RelationPrefix,
 ) -> Mapping[RelationPath[Any, Any], set[Highlighting]]:
-    match triple.relation:
-        case BasicRelation():
+    match triple:
+        case BasicTriple():
             highlight = "Related"
             sub_highlight = "SubRelated"
-        case Copy():
+        case CopyTriple():
             highlight = "Copy"
             sub_highlight = "SubCopy"
-        case _:
-            assert False
+
+    match point:
+        case "Source":
+            triple_point = triple.source
+        case "Target":
+            triple_point = triple.target
 
     highlight_mappings: list[
         dict[RelationPath[Any, Any], set[Highlighting]]
     ] = []
-
     for sop_path in sop.iter_leaf_paths(sop_prefix):
         path = RelationPath[Any, Any](
             point, sop_path, relation_prefix
@@ -60,9 +65,10 @@ def highlight_leaf_triple_point(
                     subpath,
                     relation_prefix,
                 ): {sub_highlight}
-                for subpath in triple.source.at(
+                for subpath in triple_point.at(
                     path.subtract_prefixes(
-                        source_prefix=sop_path
+                        source_prefix=sop_path,
+                        target_prefix=sop_path,
                     ).sop_path
                 ).iter_all_paths(sop_path)
             }
@@ -72,7 +78,8 @@ def highlight_leaf_triple_point(
 
 
 def highlight_leaf_triple[S, T](
-    triple: Triple[S, T, bool], parent_is_full: bool = False
+    triple: BasicTriple[S, T, bool] | CopyTriple[S, T, bool],
+    parent_is_full: bool = False,
 ) -> Mapping[RelationPath[S, T], set[Highlighting]]:
     relation = triple.relation
 
@@ -81,14 +88,12 @@ def highlight_leaf_triple[S, T](
             highlight = "Related"
         case Copy():
             highlight = "Copy"
-        case _:
-            assert False
 
     highlight_mappings: list[
         Mapping[RelationPath[S, T], set[Highlighting]]
     ] = []
 
-    if not parent_is_full:
+    if not parent_is_full and relation.data:
         highlight_mappings.append(
             {
                 RelationPath(None, (), triple.relation_prefix): {

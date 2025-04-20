@@ -75,12 +75,12 @@ class RelationPath[S, T]:
     @property
     @cache
     def as_id(self) -> str:
-        if self.sop_path:
-            assert self.point
-            return ":".join(chain(self.point, *self.sop_path))
+        if self.point:
+            return ":".join((self.point, *self.sop_path))
         else:
-            assert not self.point
-            return ":".join(map(str, self.relation_prefix))
+            return ":".join(
+                ("Relation", *map(str, self.relation_prefix))
+            )
 
     def add_prefixes(
         self,
@@ -252,6 +252,24 @@ class ParallelRelation[S, T, Data = None]:
     ) -> SumProductNode[Any, Data]:
         return at(self, path)
 
+    def map_data[OtherData](
+        self, f: Callable[[Data], OtherData]
+    ) -> ParallelRelation[S, T, OtherData]:
+        return ParallelRelation(
+            tuple(
+                (
+                    (
+                        child.map_data(f)
+                        if not isinstance(child, DeBruijn)
+                        else child
+                    ),
+                    between,
+                )
+                for child, between in self.children
+            ),
+            f(self.data),
+        )
+
 
 @dataclass(frozen=True)
 class SeriesRelation[S, T, Data = None]:
@@ -268,6 +286,10 @@ class SeriesRelation[S, T, Data = None]:
         self, path: RelationPath[S, T]
     ) -> SumProductNode[Any, Data]:
         return at(self, path)
+
+    def map_data[OtherData](
+        self, f: Callable[[Data], OtherData]
+    ) -> SeriesRelation[S, T, OtherData]: ...
 
 
 from csv_dataflow.relation.at import at

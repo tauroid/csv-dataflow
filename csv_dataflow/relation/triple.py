@@ -1,5 +1,6 @@
-from dataclasses import dataclass
-from typing import Any, overload
+from __future__ import annotations
+from dataclasses import dataclass, replace
+from typing import Any, Callable, cast, overload
 
 from csv_dataflow.relation import (
     BasicRelation,
@@ -37,12 +38,38 @@ class BasicTriple[S, T, Data = None](
 ):
     relation: BasicRelation[S, T, Data]
 
+    def map_data[OtherData](
+        self, f: Callable[[Data], OtherData]
+    ) -> BasicTriple[S, T, OtherData]:
+        return cast(
+            BasicTriple[S, T, OtherData],
+            replace(
+                self,
+                relation=self.relation.map_data(f),
+                source=self.source.map_data(f),
+                target=self.target.map_data(f),
+            ),
+        )
+
 
 @dataclass(frozen=True)
 class CopyTriple[S, T, Data = None](
     TripleMinusRelation[S, T, Data]
 ):
     relation: Copy[S, T, Data]
+
+    def map_data[OtherData](
+        self, f: Callable[[Data], OtherData]
+    ) -> CopyTriple[S, T, OtherData]:
+        return cast(
+            CopyTriple[S, T, OtherData],
+            replace(
+                self,
+                relation=self.relation.map_data(f),
+                source=self.source.map_data(f),
+                target=self.target.map_data(f),
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -71,12 +98,38 @@ class ParallelTriple[S, T, Data = None](
             self.target_prefix + between.target,
         )
 
+    def map_data[OtherData](
+        self, f: Callable[[Data], OtherData]
+    ) -> ParallelTriple[S, T, OtherData]:
+        return cast(
+            ParallelTriple[S, T, OtherData],
+            replace(
+                self,
+                relation=self.relation.map_data(f),
+                source=self.source.map_data(f),
+                target=self.target.map_data(f),
+            ),
+        )
+
 
 @dataclass(frozen=True)
 class SeriesTriple[S, T, Data = None](
     TripleMinusRelation[S, T, Data]
 ):
     relation: SeriesRelation[S, T, Data]
+
+    def map_data[OtherData](
+        self, f: Callable[[Data], OtherData]
+    ) -> SeriesTriple[S, T, OtherData]:
+        return cast(
+            SeriesTriple[S, T, OtherData],
+            replace(
+                self,
+                relation=self.relation.map_data(f),
+                source=self.source.map_data(f),
+                target=self.target.map_data(f),
+            ),
+        )
 
 
 @overload

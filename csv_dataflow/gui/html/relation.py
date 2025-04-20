@@ -41,9 +41,14 @@ def relation_html(
                     triple = relation_to_triple(
                         relation, source, target
                     )
+            triple_full = triple.map_data(lambda _: True)
             sop_htmls = (
-                sop_html(page_name, triple, "Source", source),
-                sop_html(page_name, triple, "Target", target),
+                sop_html(
+                    page_name, triple_full, "Source", source
+                ),
+                sop_html(
+                    page_name, triple_full, "Target", target
+                ),
                 # sop_div(
                 #     page_name,
                 #     source,
@@ -60,7 +65,7 @@ def relation_html(
                 # ),
             )
             # arrows = arrows_html(relation)
-            arrows = arrows_html2(triple)
+            arrows = arrows_html2(triple_full)
         case SeriesRelation():
             raise NotImplementedError
 

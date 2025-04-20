@@ -23,7 +23,7 @@ def hyperscript[S, T](
             " on mouseover"
             " halt the event's bubbling"
             f" toggle .{highlight.lower()} on"
-            f" [{",".join(path.as_id for path in paths)}]"
+            f" [{",".join('#' + path.as_id for path in paths)}]"
             " until mouseout"
         )
 

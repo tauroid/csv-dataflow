@@ -29,7 +29,7 @@ from csv_dataflow.sop import (
 
 def sop_html[S, T](
     page_name: str,
-    triple: Triple[S, T],
+    triple: Triple[S, T, bool],
     point: Literal["Source", "Target"],
     sop: SumProductNode[Any],
 ) -> str:
@@ -70,13 +70,13 @@ def node_info[S, T, N](
 def _sop_div_from_node_and_child_divs[S, T](
     page_name: str,
     node_info: NodeInfo[S, T],
-    child_divs: Iterable[tuple[SOPPathElement, str]],
+    child_divs_iter: Iterable[tuple[SOPPathElement, str]],
 ) -> str:
     expand_path = (
         f"{page_name}/expanded/{node_info.path.as_url_path}"
     )
-    child_divs_collected = tuple(child_divs)
-    if child_divs_collected:
+    child_divs = tuple(child_divs_iter)
+    if child_divs:
         method = "delete"
         match node_info.sop:
             case "+":
@@ -91,22 +91,28 @@ def _sop_div_from_node_and_child_divs[S, T](
         hx_attrs = (
             f'hx-{method}="{expand_path}" hx-swap="outerHTML"'
         )
-        if node_info.path.sop_path:
+        if child_divs:
             hx_attrs += f' hx-target="closest .{sop_class}"'
     else:
         hx_attrs = ""
 
     _ = hyperscript(node_info.highlighting)
 
+    if node_info.path.sop_path:
+        label = node_info.path.sop_path[-1]
+    else:
+        label = node_info.path.point
+        assert label
+
     node_div = inspect.cleandoc(
         f"""
         <div id="{node_info.path.as_id}" _="{_}" {hx_attrs}>
-            {node_info.path.sop_path[-1]}
+            {label}
         </div>
         """
     )
 
-    if child_divs_collected:
+    if child_divs:
         return inspect.cleandoc(
             f"""
             <div class="{sop_class}">

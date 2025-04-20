@@ -24,8 +24,8 @@ def subtree_in_relation[S, T](
             children_relation_status
         ),
         (
-            context.related_parent_info
-            and len(context.related_parent_info.head) > 0
+            context.relations_from_root
+            and len(context.relations_from_root.head) > 0
         )
         or any(
             child.data for _, child in children_relation_status
