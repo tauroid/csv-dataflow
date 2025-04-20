@@ -2,16 +2,12 @@ from typing import Literal
 
 
 Highlighting = Literal[
-    "BareSelected",
+    "Selected",
     "Related",
-    "RelatedSelected",
     "SubRelated",
-    "SubRelatedSelected",
     "HasRelatedChildren",
     "Copy",
     "ChildIsCopySelected",
-    "CopySelected",
     "SubCopy",
-    "SubCopySelected",
     "SubSubCopy",
 ]

@@ -14,10 +14,13 @@ from csv_dataflow.sop import (
 def subtree_in_relation[S, T](
     context: HighlightingContext[S, T],
     sop: SumProductNode[Any],
-    children_relation_status: Iterable[
+    children_relation_status_iter: Iterable[
         tuple[SOPPathElement, SumProductNode[Any, bool]]
     ],
 ) -> SumProductNode[Any, bool]:
+    children_relation_status = tuple(
+        children_relation_status_iter
+    )
     return SumProductNode[Any, bool](
         sop.sop,
         frozendict[SOPPathElement, SumProductChild[bool]](

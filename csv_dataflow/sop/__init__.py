@@ -101,6 +101,11 @@ class SumProductNode(Generic[T, Data]):
     ) -> Iterator[SumProductPath[T]]:
         return iterate_every(self, prefix)
 
+    def iter_all_paths_with_data(
+        self, prefix: SumProductPath[T] = ()
+    ) -> Iterator[tuple[SumProductPath[T], Data]]:
+        return iterate_every_with_data(self, prefix)
+
     def add_values_at_paths(
         self, paths: Collection[SumProductPath[T]]
     ) -> SumProductNode[T, Data]:
@@ -169,6 +174,7 @@ from csv_dataflow.sop.merge import merge
 from csv_dataflow.sop.paths.add_values import add_values_at_paths
 from csv_dataflow.sop.paths.iterate import (
     iterate_every,
+    iterate_every_with_data,
     iterate_leaves,
 )
 from csv_dataflow.sop.paths.filter_to import filter_to_paths

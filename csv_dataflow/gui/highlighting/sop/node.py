@@ -1,7 +1,13 @@
+from dataclasses import replace
 from typing import Mapping
 from csv_dataflow.cons import iter_cons_list
+from csv_dataflow.gui.highlighting.merge import (
+    merge_path_highlights,
+)
 from csv_dataflow.gui.highlighting.modes import Highlighting
 from csv_dataflow.gui.highlighting.sop.context import (
+    BasicContext,
+    CopyContext,
     HighlightingContext,
 )
 from csv_dataflow.gui.highlighting.triple import highlight_triple
@@ -18,7 +24,46 @@ def highlighting_from_node_mouseover[S, T, N](
     commonality to this that I should do first
     """
 
-    return highlight_triple(context.triple_filtered_to_node)
+    highlight_mappings: list[
+        Mapping[RelationPath[S, T], set[Highlighting]]
+    ] = []
+
+    highlight_mappings.append(
+        highlight_triple(context.triple_filtered_to_node)
+    )
+
+    highlight_mappings.append({context.path: {"Selected"}})
+
+    if context.path == RelationPath(
+        "Source", ("list", "head"), ()
+    ):
+        print(subtree_in_relation)
+
+    highlight_mappings.append(
+        {
+            replace(context.path, sop_path=path): {
+                "HasRelatedChildren"
+            }
+            for path, data in subtree_in_relation.iter_all_paths_with_data(
+                context.path.sop_path
+            )
+            if data
+        }
+    )
+
+    for node_relations in iter_cons_list(
+        context.relations_from_root
+    ):
+        for relation_context in node_relations:
+            match relation_context:
+                case BasicContext(triple):
+                    highlight_mappings.append(
+                        highlight_triple(triple)
+                    )
+                case CopyContext():
+                    raise NotImplementedError
+
+    return merge_path_highlights(highlight_mappings)
 
     # highlight_mappings: list[
     #     Mapping[RelationPath[S, T], Highlighting]

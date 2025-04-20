@@ -19,7 +19,9 @@ def iterate_leaves(
             assert not isinstance(
                 child, int
             ), "Flat iterating over a recursive type is probably a mistake"
-            for path in iterate_leaves(child, (*prefix, child_path)):
+            for path in iterate_leaves(
+                child, (*prefix, child_path)
+            ):
                 yield path
 
 
@@ -27,6 +29,14 @@ def iterate_every(
     sop: SumProductNode[T, Data] | DeBruijn,
     prefix: SumProductPath[T] = (),
 ) -> Iterator[SumProductPath[T]]:
+    for path, _ in iterate_every_with_data(sop, prefix):
+        yield path
+
+
+def iterate_every_with_data(
+    sop: SumProductNode[T, Data] | DeBruijn,
+    prefix: SumProductPath[T] = (),
+) -> Iterator[tuple[SumProductPath[T], Data]]:
     """
     Iterates over every path, not just leaves
 
@@ -35,24 +45,24 @@ def iterate_every(
     Does not include recursed paths
     (come back and add a flag if you want that)
     """
-    yield prefix
-
     if isinstance(sop, DeBruijn):
         return
+
+    yield prefix, sop.data
 
     level = len(prefix) + 1
 
     child_iterators = tuple(
-        iterate_every(child, (*prefix, child_path))
+        iterate_every_with_data(child, (*prefix, child_path))
         for child_path, child in sop.children.items()
     )
     next_paths = tuple(next(it) for it in child_iterators)
 
     while child_iterators:
         new_child_iterators: list[
-            Iterator[SumProductPath[T]]
+            Iterator[tuple[SumProductPath[T], Data]]
         ] = []
-        new_next_paths: list[SumProductPath[T]] = []
+        new_next_paths: list[tuple[SumProductPath[T], Data]] = []
         for next_path, child_iterator in zip(
             next_paths, child_iterators
         ):

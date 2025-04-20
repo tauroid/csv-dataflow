@@ -33,6 +33,7 @@ def iter_cons_list[T](l: ConsList[T]) -> Iterator[T]:
     match l:
         case Cons(head, tail):
             yield head
-            return iter_cons_list(tail)
+            for v in iter_cons_list(tail):
+                yield v
         case None:
             return

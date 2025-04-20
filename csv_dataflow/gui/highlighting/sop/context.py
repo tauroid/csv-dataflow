@@ -20,12 +20,12 @@ from csv_dataflow.sop import SOPPathElement, SumProductNode
 
 @dataclass(frozen=True)
 class BasicContext[S, T]:
-    relation: BasicTriple[S, T, bool]
+    triple: BasicTriple[S, T, bool]
 
 
 @dataclass(frozen=True)
 class CopyContext[S, T]:
-    relation: CopyTriple[S, T, bool]
+    triple: CopyTriple[S, T, bool]
     subpath: ConsList[SOPPathElement]
 
 
