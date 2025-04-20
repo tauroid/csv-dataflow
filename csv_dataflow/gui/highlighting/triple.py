@@ -10,7 +10,6 @@ from csv_dataflow.relation import (
     ParallelRelation,
     Relation,
     RelationPath,
-    RelationPrefix,
     SeriesRelation,
 )
 from csv_dataflow.relation.triple import (
@@ -20,21 +19,14 @@ from csv_dataflow.relation.triple import (
     SeriesTriple,
     Triple,
 )
-from csv_dataflow.sop import (
-    DeBruijn,
-    SumProductNode,
-    SumProductPath,
-)
+from csv_dataflow.sop import DeBruijn
 
 
 def highlight_leaf_triple_point(
     point: Literal["Source", "Target"],
-    sop: SumProductNode[Any, bool],
     triple: (
         BasicTriple[Any, Any, bool] | CopyTriple[Any, Any, bool]
     ),
-    sop_prefix: SumProductPath[Any],
-    relation_prefix: RelationPrefix,
 ) -> Mapping[RelationPath[Any, Any], set[Highlighting]]:
     match triple:
         case BasicTriple():
@@ -47,30 +39,35 @@ def highlight_leaf_triple_point(
     match point:
         case "Source":
             triple_point = triple.source
+            relation_point = triple.relation.source
+            point_prefix = triple.source_prefix
         case "Target":
             triple_point = triple.target
+            relation_point = triple.relation.target
+            point_prefix = triple.target_prefix
+
+    if not relation_point:
+        return {}
 
     highlight_mappings: list[
         dict[RelationPath[Any, Any], set[Highlighting]]
     ] = []
-    for sop_path in sop.iter_leaf_paths(sop_prefix):
+    for sop_path in relation_point.iter_leaf_paths():
         path = RelationPath[Any, Any](
-            point, sop_path, relation_prefix
+            point,
+            point_prefix + sop_path,
+            triple.relation_prefix,
         )
         highlight_mappings.append({path: {highlight}})
+        subtree = triple_point.at(sop_path)
         highlight_mappings.append(
             {
                 RelationPath(
                     point,
-                    subpath,
-                    relation_prefix,
+                    point_prefix + subpath,
+                    triple.relation_prefix,
                 ): {sub_highlight}
-                for subpath in triple_point.at(
-                    path.subtract_prefixes(
-                        source_prefix=sop_path,
-                        target_prefix=sop_path,
-                    ).sop_path
-                ).iter_all_paths(sop_path)
+                for subpath in subtree.iter_all_paths(sop_path)
             }
         )
 
@@ -104,24 +101,12 @@ def highlight_leaf_triple[S, T](
 
     if relation.source:
         highlight_mappings.append(
-            highlight_leaf_triple_point(
-                "Source",
-                relation.source,
-                triple,
-                triple.source_prefix,
-                triple.relation_prefix,
-            )
+            highlight_leaf_triple_point("Source", triple)
         )
 
     if relation.target:
         highlight_mappings.append(
-            highlight_leaf_triple_point(
-                "Target",
-                relation.target,
-                triple,
-                triple.target_prefix,
-                triple.relation_prefix,
-            )
+            highlight_leaf_triple_point("Target", triple)
         )
 
     return merge_path_highlights(highlight_mappings)
