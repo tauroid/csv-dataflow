@@ -17,8 +17,8 @@ from csv_dataflow.sop import SumProductNode
 @pickler
 @dataclass
 class VisibleTriple[S, T]:
-    source: SumProductNode[S, bool] = field_pickler()
-    target: SumProductNode[T, bool] = field_pickler()
+    source: SumProductNode[S] = field_pickler()
+    target: SumProductNode[T] = field_pickler()
     relation: Relation[S, T] = field_pickler()
 
     @classmethod
@@ -36,8 +36,8 @@ class VisibleTriple[S, T]:
         )
         assert target
         return cls(
-            source,
-            target,
+            source.map_data(lambda _: None),
+            target.map_data(lambda _: None),
             clip_relation(
                 user_state.relation,
                 source,

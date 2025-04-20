@@ -4,6 +4,7 @@ from functools import cache
 from itertools import chain
 from typing import (
     Any,
+    Callable,
     Literal,
     Self,
     TypeVar,
@@ -133,7 +134,23 @@ class RelationPath[S, T]:
 
 
 @dataclass(frozen=True)
-class BasicRelation[S, T, Data = None]:
+class LeafRelation[S, T, Data]:
+    source: SumProductNode[S, Data] | None
+    target: SumProductNode[T, Data] | None
+    data: Data = cast(Data, None)
+
+    def map_data[OtherData](
+        self, f: Callable[[Data], OtherData]
+    ) -> BasicRelation[S, T, OtherData]:
+        return BasicRelation(
+            self.source.map_data(f) if self.source else None,
+            self.target.map_data(f) if self.target else None,
+            f(self.data),
+        )
+
+
+@dataclass(frozen=True)
+class BasicRelation[S, T, Data = None](LeafRelation[S, T, Data]):
     """
     This is a binary relation, between all path groupings that
     "fill" the source or target path sets in the sense that for a
@@ -155,10 +172,6 @@ class BasicRelation[S, T, Data = None]:
     classes
     """
 
-    source: SumProductNode[S, Data] | None
-    target: SumProductNode[T, Data] | None
-    data: Data = cast(Data, None)
-
     def at(
         self, path: RelationPath[S, T]
     ) -> SumProductNode[Any, Data]:
@@ -166,7 +179,7 @@ class BasicRelation[S, T, Data = None]:
 
 
 @dataclass(frozen=True)
-class Copy[S, T, Data = None]:
+class Copy[S, T, Data = None](LeafRelation[S, T, Data]):
     """
     Individually relates every leaf (and closure under "*" of
     leaves) under each leaf of `source`, in the full source type,
@@ -188,9 +201,10 @@ class Copy[S, T, Data = None]:
     BasicRelations)
     """
 
-    source: SumProductNode[S, Data] | None
-    target: SumProductNode[T, Data] | None
-    data: Data = cast(Data, None)
+    def at(
+        self, path: RelationPath[S, T]
+    ) -> SumProductNode[Any, Data]:
+        return at(self, path)
 
 
 @dataclass(frozen=True)

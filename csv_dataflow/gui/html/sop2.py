@@ -27,9 +27,9 @@ from csv_dataflow.sop import (
 )
 
 
-def sop_div[S, T](
+def sop_html[S, T](
     page_name: str,
-    triple: Triple[S, T, bool],
+    triple: Triple[S, T],
     point: Literal["Source", "Target"],
     sop: SumProductNode[Any],
 ) -> str:

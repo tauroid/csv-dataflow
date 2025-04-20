@@ -12,7 +12,13 @@ from csv_dataflow.relation import (
     RelationPath,
     SeriesRelation,
 )
+from csv_dataflow.relation.triple import relation_to_triple
 from csv_dataflow.sop import SumProductNode
+
+from csv_dataflow.gui.html.sop2 import sop_html
+from csv_dataflow.gui.html.arrows2 import (
+    arrows_html as arrows_html2,
+)
 
 S = TypeVar("S")
 T = TypeVar("T")
@@ -20,29 +26,41 @@ T = TypeVar("T")
 
 def relation_html(
     page_name: str,
-    source: SumProductNode[S, bool],
-    target: SumProductNode[T, bool],
+    source: SumProductNode[S],
+    target: SumProductNode[T],
     relation: Relation[S, T],
 ) -> str:
     match relation:
         case BasicRelation() | ParallelRelation():
+            match relation:
+                case BasicRelation():
+                    triple = relation_to_triple(
+                        relation, source, target
+                    )
+                case ParallelRelation():
+                    triple = relation_to_triple(
+                        relation, source, target
+                    )
             sop_htmls = (
-                sop_div(
-                    page_name,
-                    source,
-                    RelationPath("Source", ()),
-                    relation,
-                    relation,
-                ),
-                sop_div(
-                    page_name,
-                    target,
-                    RelationPath("Target", ()),
-                    relation,
-                    relation,
-                ),
+                sop_html(page_name, triple, "Source", source),
+                sop_html(page_name, triple, "Target", target),
+                # sop_div(
+                #     page_name,
+                #     source,
+                #     RelationPath("Source", ()),
+                #     relation,
+                #     relation,
+                # ),
+                # sop_div(
+                #     page_name,
+                #     target,
+                #     RelationPath("Target", ()),
+                #     relation,
+                #     relation,
+                # ),
             )
-            arrows = arrows_html(relation)
+            # arrows = arrows_html(relation)
+            arrows = arrows_html2(triple)
         case SeriesRelation():
             raise NotImplementedError
 
