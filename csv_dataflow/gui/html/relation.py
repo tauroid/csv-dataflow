@@ -80,7 +80,7 @@ def relation_html(
     )
 
 
-css = (Path(__file__).parent / "style.css").read_text()
+css = (Path(__file__).parent / "style.css").read_text(encoding="utf-8")
 
 
 def relation_page_html(

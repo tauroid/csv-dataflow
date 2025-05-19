@@ -92,6 +92,7 @@ def root() -> str:
                 <page-link><a href="/ex3">Example 3: List head</a></page-link>
                 <page-link><a href="/ex4">Example 4: List map</a></page-link>
                 <page-link><a href="/ex5">Example 5: flip.py</a></page-link>
+                <page-link><a href="/netcdf-to-grib">NetCDF to GRIB</a></page-link>
             </page-links>
         </body>
     </html>
@@ -142,6 +143,18 @@ def example_5() -> str:
     from examples.ex5.flip import flip
 
     return relation_page("ex5", flip.as_triple)
+
+@app.route("/netcdf-to-grib")
+def netcdf_to_grib() -> str:
+    from examples.netcdf_to_grib.types import NetCDF, GRIB
+
+    return relation_page(
+        "netcdf-to-grib", 
+        parallel_relation_from_csv(
+            NetCDF, GRIB, 
+            Path("examples/netcdf_to_grib/mapping.csv")
+        )
+    )
 
 
 @app.route(

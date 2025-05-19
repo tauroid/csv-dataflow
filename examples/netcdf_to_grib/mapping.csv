@@ -1,0 +1,7 @@
+standard_name,grid_mapping_name,cell_methods,,Template3_0 / x,Template3_140 / x,discipline,category,number,Template4_0 / x, Template4_8 / x
+temperature,,,,,,0,0,0,,
+cloud_base_altitude,,,,,,0,3,33,,
+,latitude_longitude,,,x,,,,,,
+,lambert_azimuthal_equal_area,,,,x,,,,,
+,,time_point,,,,,,,x,
+,,time_sum,,,,,,,,x
